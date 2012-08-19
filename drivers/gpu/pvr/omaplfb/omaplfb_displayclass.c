@@ -884,12 +884,24 @@ static IMG_BOOL ProcessFlipV2(IMG_HANDLE hCmdCookie,
 
 	memset(asMemInfo, 0, sizeof(asMemInfo));
 
+/*
+ * XXX ENCORE DSSCOMP
+ * The PVR userspace components seem to be passing in a structure of
+ * a size different than we expect.  Testing shows that this error can be
+ * safely ignored.
+ *
+ * A peek at the end of struct dsscomp_setup_dispc_data shows that it's an
+ * array of overlay information structures; perhaps PVR is just passing in a
+ * smaller array than we've made room for in the structure definition?
+ */
+#if 0
 	if(uiDssDataLength != sizeof(*psDssData))
 	{
 		WARN(1, "invalid size of private data (%d vs %d)",
 		     uiDssDataLength, sizeof(*psDssData));
 		return IMG_FALSE;
 	}
+#endif
 
 	if(psDssData->num_ovls == 0 || ui32NumMemInfos == 0)
 	{
