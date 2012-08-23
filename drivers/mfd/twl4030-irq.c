@@ -27,6 +27,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  */
 
+#include <linux/device.h>
+
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -59,6 +61,14 @@
 #define REG_PIH_ISR_P1			0x01
 #define REG_PIH_ISR_P2			0x02
 #define REG_PIH_SIR			0x03	/* for testing */
+
+
+//&*&*&*Eason.MJ.Li_201120419, Add to control wakeup source
+u8 g_twl4030_pih_isr = 0;
+u8 g_twl4030_sih_isr = 0;
+//&*&*&*Eason.MJ.Li_201120419, Add to control wakeup source
+u8 wakeup_stage=0;
+
 
 
 /* Linux could (eventually) use either IRQ line */
@@ -280,6 +290,11 @@ static unsigned twl4030_irq_base;
 
 static struct completion irq_event;
 
+extern void kernel_restart(char *cmd);
+extern void set_reboot_flag(int value);
+extern void error_kernel_restart(void);
+
+
 /*
  * This thread processes interrupts reported by the Primary Interrupt Handler.
  */
@@ -302,6 +317,16 @@ static int twl4030_irq_thread(void *data)
 
 		ret = twl_i2c_read_u8(TWL4030_MODULE_PIH, &pih_isr,
 					  REG_PIH_ISR_P1);
+		//&*&*&**Eason.MJ.Li_201120419, Add to control wakeup source
+		//printk("%s, REG_PIH_ISR_P1=0x%x\n", __FUNCTION__, pih_isr);
+		#ifndef CONFIG_LOW_BATTERY_HANDLE
+				if(wakeup_stage == 2){
+                      g_twl4030_pih_isr = pih_isr;
+                       wakeup_stage=1;
+                     printk("%s,REG_PIH_ISR_P1=0x%x\n",__FUNCTION__,pih_isr); 
+                     }
+    #endif
+//&*&*&**Eason.MJ.Li_201120419, Add to control wakeup source
 		if (ret) {
 			pr_warning("twl4030: I2C error %d reading PIH ISR\n",
 					ret);
@@ -309,6 +334,7 @@ static int twl4030_irq_thread(void *data)
 				printk(KERN_ERR "Maximum I2C error count"
 						" exceeded.  Terminating %s.\n",
 						__func__);
+				error_kernel_restart();				
 				break;
 			}
 			complete(&irq_event);
@@ -658,6 +684,23 @@ static void handle_twl4030_sih(unsigned irq, struct irq_desc *desc)
 	local_irq_enable();
 	isr = sih_read_isr(sih);
 	local_irq_disable();
+	
+	//&*&*&**Eason.MJ.Li_201120419, Add to control wakeup source
+		printk("%s, isr=0x%x, irq=%d\n", __FUNCTION__, isr, irq);
+#ifdef CONFIG_LOW_BATTERY_HANDLE
+		   if(wakeup_stage == 2){
+				g_twl4030_sih_isr = isr;
+					wakeup_stage=0;
+					printk("andy sih_isr=%d\n",isr);
+				   }
+#else
+		   if(wakeup_stage == 1){
+				g_twl4030_sih_isr = isr;
+					wakeup_stage=0;
+					printk("andy sih_isr=%d\n",isr);
+				   }
+#endif
+	//&*&*&**Eason.MJ.Li_201120419, Add to control wakeup source
 
 	if (isr < 0) {
 		pr_err("twl4030: %s SIH, read ISR error %d\n",

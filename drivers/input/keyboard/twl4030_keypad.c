@@ -33,8 +33,16 @@
 #include <linux/platform_device.h>
 #include <linux/i2c/twl.h>
 #include <linux/slab.h>
+#define GSENSER_LOCK
 
+//&*&*&HC1_20110428, disable keypad wakeup source
+#define CONFIG_KEYPAD_WAKEUP_SOURCE_DISABLE 1
+//&*&*&HC2_20110428, disable keypad wakeup source
 
+#ifdef GSENSER_LOCK 
+#include <linux/switch.h>
+#include <mach/gpio.h>
+#endif
 /*
  * The TWL4030 family chips include a keypad controller that supports
  * up to an 8x8 switch matrix.  The controller can issue system wakeup
@@ -58,13 +66,22 @@
 #define TWL4030_ROW_SHIFT	4
 #define TWL4030_KEYMAP_SIZE	(TWL4030_MAX_ROWS << TWL4030_ROW_SHIFT)
 
+#ifdef GSENSER_LOCK
+#define G_LOCK_SW 161
+#define FUNCTION_NAME	"Gensor_IRQ"
+#endif
+
 struct twl4030_keypad {
 	unsigned short	keymap[TWL4030_KEYMAP_SIZE];
 	u16		kp_state[TWL4030_MAX_ROWS];
 	unsigned	n_rows;
 	unsigned	n_cols;
 	unsigned	irq;
-
+#ifdef GSENSER_LOCK
+	/*LH_SWRD_CL1_SAM for gsensor switch-->*/
+	int			lock_status;
+	struct 		switch_dev sdev;
+#endif
 	struct device *dbg_dev;
 	struct input_dev *input;
 };
@@ -324,7 +341,27 @@ static int __devinit twl4030_kp_program(struct twl4030_keypad *kp)
 
 	return 0;
 }
+#ifdef GSENSER_LOCK
+	/*LH_SWRD_CL1_SAM for gsensor switch-->*/
+static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%s\n", FUNCTION_NAME);
+}
+static ssize_t print_switch_state(struct switch_dev *sdev, char *buf)
+{
+	struct twl4030_keypad *kp = container_of(sdev, struct twl4030_keypad , sdev);
+	return sprintf(buf, "%s\n", (kp->lock_status ? "offline" : "online"));
+}
 
+static irqreturn_t process_interrupt(int irq, void *_kp)
+{
+	struct twl4030_keypad *kp = _kp;
+	printk("in the process_interrupt\n");
+	 kp->lock_status= gpio_get_value(G_LOCK_SW); 
+	switch_set_state(&kp->sdev, kp->lock_status);
+	return IRQ_HANDLED;
+}
+#endif
 /*
  * Registers keypad device with input subsystem
  * and configures TWL4030 keypad registers
@@ -345,7 +382,6 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 	}
 
 	keymap_data = pdata->keymap_data;
-
 	kp = kzalloc(sizeof(*kp), GFP_KERNEL);
 	input = input_allocate_device();
 	if (!kp || !input) {
@@ -364,10 +400,32 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 	/* setup input device */
 	__set_bit(EV_KEY, input->evbit);
 
+#ifdef GSENSER_LOCK
+/*LH_SWRD_CL1_SAM for gsensor switch-->*/
+	if(gpio_request(161, NULL) != 0)
+		printk("request gpio 161 Gsensor lock error!\n");
+	kp->lock_status= gpio_get_value(G_LOCK_SW);
+	kp->sdev.name = FUNCTION_NAME;
+	kp->sdev.print_name = print_switch_name;
+	kp->sdev.print_state = print_switch_state;
+	kp->sdev.state = 0;
+	error = switch_dev_register(&kp->sdev);
+
+	if (error < 0)
+	{
+		printk("Error registering switch!\n");
+		goto err4;
+	}	
+
+	kp->lock_status= gpio_get_value(G_LOCK_SW); 
+	switch_set_state(&kp->sdev, kp->lock_status);
+	/*<--LH_SWRD_CL1_SAM for gsensor switch*/
+#endif
 	/* Enable auto repeat feature of Linux input subsystem */
 	if (pdata->rep)
 		__set_bit(EV_REP, input->evbit);
 
+	
 	input_set_capability(input, EV_MSC, MSC_SCAN);
 
 	input->name		= "twl4030-keypad";
@@ -396,7 +454,6 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 	error = twl4030_kp_program(kp);
 	if (error)
 		goto err2;
-
 	/*
 	 * This ISR will always execute in kernel thread context because of
 	 * the need to access the TWL4030 over the I2C bus.
@@ -410,7 +467,15 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 			kp->irq);
 		goto err2;
 	}
-
+#ifdef GSENSER_LOCK
+	/*LH_SWRD_CL1_SAM for gsensor switch-->*/
+	error = request_threaded_irq(gpio_to_irq(G_LOCK_SW),NULL, process_interrupt, IRQF_TRIGGER_FALLING |IRQF_TRIGGER_RISING, "sensor_irq", kp);
+		if( error )
+		{
+			dev_info(kp->dbg_dev, "request swith interrupt error!\n");
+			goto err2;
+		}
+#endif
 	/* Enable KP and TO interrupts now. */
 	reg = (u8) ~(KEYP_IMR1_KP | KEYP_IMR1_TO);
 	if (twl4030_kpwrite_u8(kp, reg, KEYP_IMR1)) {
@@ -420,7 +485,10 @@ static int __devinit twl4030_kp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, kp);
 	return 0;
-
+#ifdef GSENSER_LOCK
+err4:
+	switch_dev_unregister(&kp->sdev);
+#endif
 err3:
 	/* mask all events - we don't care about the result */
 	(void) twl4030_kpwrite_u8(kp, 0xff, KEYP_IMR1);
@@ -439,12 +507,83 @@ static int __devexit twl4030_kp_remove(struct platform_device *pdev)
 	struct twl4030_keypad *kp = platform_get_drvdata(pdev);
 
 	free_irq(kp->irq, kp);
+#ifdef GSENSER_LOCK
+	free_irq(gpio_to_irq(G_LOCK_SW),kp);
+	switch_dev_unregister(&kp->sdev);
+#endif
 	input_unregister_device(kp->input);
 	platform_set_drvdata(pdev, NULL);
 	kfree(kp);
 
 	return 0;
 }
+
+//&*&*&HC1_20110428, disable keypad wakeup source
+#ifdef CONFIG_PM
+
+static int twl4030_kp_suspend(struct platform_device *pdev,
+				 pm_message_t state)
+{
+	struct twl4030_keypad *kp = platform_get_drvdata(pdev);
+	int ret = 0;
+	u8 reg;
+	
+#ifdef CONFIG_KEYPAD_WAKEUP_SOURCE_DISABLE
+
+	ret = twl_i2c_read_u8(TWL4030_MODULE_KEYPAD, &reg, KEYP_IMR1);	
+
+	printk("%s, KEYP_IMR1=0x%x\n", __FUNCTION__, reg);
+
+	reg |= (KEYP_IMR1_KP | KEYP_IMR1_TO);
+	
+	ret = twl_i2c_write_u8(TWL4030_MODULE_KEYPAD, reg, KEYP_IMR1);	
+
+#endif //CONFIG_KEYPAD_WAKEUP_SOURCE_DISABLE
+#ifdef CONFIG_CL1_DVT_BOARD
+	disable_irq(gpio_to_irq(G_LOCK_SW));
+	gpio_direction_input(G_LOCK_SW);	
+#if defined(CONFIG_CL1_3G_BOARD)
+       disable_irq(gpio_to_irq(CAMERA_OE));
+	   gpio_direction_input(CAMERA_OE);
+#endif
+#endif
+	return ret;
+}
+
+static int twl4030_kp_resume(struct platform_device *pdev)
+{
+	struct twl4030_keypad *kp = platform_get_drvdata(pdev);
+	int ret = 0;
+	u8 reg;
+
+#ifdef CONFIG_KEYPAD_WAKEUP_SOURCE_DISABLE
+	
+	ret = twl_i2c_read_u8(TWL4030_MODULE_KEYPAD, &reg, KEYP_IMR1);	
+
+	printk("%s, KEYP_IMR1=0x%x\n", __FUNCTION__, reg);
+
+	reg &= ~(KEYP_IMR1_KP | KEYP_IMR1_TO);
+	
+	ret = twl_i2c_write_u8(TWL4030_MODULE_KEYPAD, reg, KEYP_IMR1);		
+
+#endif //CONFIG_KEYPAD_WAKEUP_SOURCE_DISABLE
+#ifdef CONFIG_CL1_DVT_BOARD
+		enable_irq(gpio_to_irq(G_LOCK_SW));
+		kp->lock_status= gpio_get_value(G_LOCK_SW); 
+	    switch_set_state(&kp->sdev, kp->lock_status);
+		
+#if defined(CONFIG_CL1_3G_BOARD)
+       enable_irq(gpio_to_irq(CAMERA_OE));
+#endif
+#endif
+	return ret;
+}
+#else	/* !CONFIG_PM */
+#define twl4030_kp_suspend	NULL
+#define twl4030_kp_resume	NULL
+#endif	/* !CONFIG_PM */
+//&*&*&HC2_20110428, disable keypad wakeup source
+
 
 /*
  * NOTE: twl4030 are multi-function devices connected via I2C.
@@ -459,6 +598,10 @@ static struct platform_driver twl4030_kp_driver = {
 		.name	= "twl4030_keypad",
 		.owner	= THIS_MODULE,
 	},
+//&*&*&HC1_20110428, disable keypad wakeup source	
+	.suspend		= twl4030_kp_suspend,
+	.resume		= twl4030_kp_resume,
+//&*&*&HC2_20110428, disable keypad wakeup source	
 };
 
 static int __init twl4030_kp_init(void)

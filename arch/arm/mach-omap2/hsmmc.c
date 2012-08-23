@@ -19,6 +19,13 @@
 #include <plat/mux.h>
 #include <plat/omap_device.h>
 
+//add mike.ma for wifi interface
+#ifdef CONFIG_TIWLAN_SDIO
+#include <linux/mmc/sdio_ids.h>
+#include <linux/mmc/sdio_func.h>
+#endif
+
+
 #include "mux.h"
 #include "hsmmc.h"
 #include "control.h"
@@ -189,6 +196,64 @@ static int nop_mmc_set_power(struct device *dev, int slot, int power_on,
 {
 	return 0;
 }
+//add mike.ma for wifi interface
+#ifdef CONFIG_TIWLAN_SDIO
+#ifndef CONFIG_WIRELESS_BCM4329
+static struct sdio_embedded_func wifi_func_array[] = {
+	{
+		.f_class        = SDIO_CLASS_NONE,
+		.f_maxblksize   = 512,
+	},
+	{
+		.f_class        = SDIO_CLASS_WLAN,
+		.f_maxblksize   = 512,
+	},
+};
+#endif
+
+static struct embedded_sdio_data omap_wifi_emb_data = {
+	.cis    = {
+#ifdef CONFIG_WIRELESS_BCM4329
+		.vendor         = SDIO_VENDOR_ID_BCM43X9,
+		.device         = SDIO_DEVICE_ID_BCM43X9,
+#else
+		.vendor         = SDIO_VENDOR_ID_TI,
+		.device         = SDIO_DEVICE_ID_TI_WL12xx,
+#endif
+		.blksize        = 512,
+#ifdef CONFIG_ARCH_OMAP3
+		.max_dtr        = 24000000,
+#else
+		.max_dtr        = 48000000,
+#endif
+	},
+#ifdef CONFIG_WIRELESS_BCM4329
+	.cccr	= {
+		.sdio_vsn	= 2,
+		.multi_block	= 1,
+		.low_speed	= 0,
+		.wide_bus	= 0,
+		.high_power	= 0,
+		.high_speed	= 0,
+	},
+#else // CONFIG_WIRELESS_BCM4329
+	.cccr   = {
+		.multi_block	= 1,
+		.low_speed	= 0,
+		.wide_bus	= 1,
+		.high_power	= 0,
+#ifdef CONFIG_ARCH_OMAP3
+		.high_speed	= 0,
+#else
+		.high_speed	= 1,
+#endif
+		.disable_cd	= 1,
+	},
+	.funcs  = wifi_func_array,
+	.quirks = MMC_QUIRK_VDD_165_195 | MMC_QUIRK_LENIENT_FUNC0,
+#endif // CONFIG_WIRELESS_BCM4329
+};
+#endif // CONFIG_TIWLAN_SDIO
 
 static inline void omap_hsmmc_mux(struct omap_mmc_platform_data *mmc_controller,
 			int controller_nr)
@@ -288,6 +353,15 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 	else
 		snprintf(hc_name, (HSMMC_NAME_LEN + 1), "mmc%islot%i",
 								c->mmc, 1);
+//add mike.ma for wifi 
+	#ifdef CONFIG_TIWLAN_SDIO
+		if (c->mmc == CONFIG_TIWLAN_MMC_CONTROLLER) {
+			mmc->slots[0].embedded_sdio = &omap_wifi_emb_data;
+			mmc->slots[0].register_status_notify = &omap_wifi_status_register;
+			mmc->slots[0].card_detect = &omap_wifi_status;
+		}
+#endif
+//
 	mmc->slots[0].name = hc_name;
 	mmc->nr_slots = 1;
 	mmc->slots[0].caps = c->caps;
@@ -298,7 +372,13 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 	else
 		mmc->reg_offset = 0;
 
+//&*&*&*SJ1_20110607, Add SIM card detection.		
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+		mmc->slots[0].sim_switch_pin = c->gpio_sim_cd;
+#endif
+//&*&*&*SJ2_20110607, Add SIM card detection.
 	mmc->slots[0].switch_pin = c->gpio_cd;
+                mmc->slots[0].cd_active_high = c->cd_active_high;
 	mmc->slots[0].gpio_wp = c->gpio_wp;
 
 	mmc->slots[0].remux = c->remux;
@@ -392,11 +472,20 @@ static int __init omap_hsmmc_pdata_init(struct omap2_hsmmc_info *c,
 			mmc->slots[0].before_set_reg = hsmmc23_before_set_reg;
 			mmc->slots[0].after_set_reg = NULL;
 		}
+
+		//add mike.ma
+		#ifdef CONFIG_TIWLAN_SDIO
+			mmc->slots[0].ocr_mask  = MMC_VDD_165_195|MMC_VDD_20_21;
+              #endif
 		break;
 	case 4:
 	case 5:
 		mmc->slots[0].before_set_reg = NULL;
 		mmc->slots[0].after_set_reg = NULL;
+		//add mike.ma
+		#ifdef CONFIG_TIWLAN_SDIO
+			mmc->slots[0].ocr_mask  = MMC_VDD_165_195;
+            #endif
 		break;
 	default:
 		pr_err("MMC%d configuration not supported!\n", c->mmc);
@@ -476,6 +565,7 @@ void __init omap_init_hsmmc(struct omap2_hsmmc_info *hsmmcinfo, int ctrl_nr)
 	 * required to populate for regulator framework structure
 	 */
 	hsmmcinfo->dev = &od->pdev.dev;
+
 
 done:
 	kfree(mmc_data);

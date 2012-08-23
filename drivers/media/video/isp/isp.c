@@ -495,6 +495,8 @@ static void isp_enable_interrupts(struct device *dev)
 	if (CCDC_PREV_RESZ_CAPTURE(isp))
 		irq0enable |= IRQ0ENABLE_PRV_DONE_IRQ | IRQ0ENABLE_RSZ_DONE_IRQ;
 
+	if (CCDC_RESZ_CAPTURE(isp))
+		irq0enable |= IRQ0ENABLE_RSZ_DONE_IRQ;
 	isp_reg_writel(dev, -1, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0STATUS);
 	isp_complete_reset = 0;
 
@@ -525,6 +527,8 @@ static void isp_disable_interrupts(struct device *dev)
 	if (CCDC_PREV_RESZ_CAPTURE(isp))
 		irq0enable &= ~(IRQ0ENABLE_PRV_DONE_IRQ
 			| IRQ0ENABLE_RSZ_DONE_IRQ);
+	if (CCDC_RESZ_CAPTURE(isp))
+		irq0enable &= ~(IRQ0ENABLE_RSZ_DONE_IRQ);
 
 	isp_reg_and(dev, OMAP3_ISP_IOMEM_MAIN, ISP_IRQ0ENABLE, irq0enable);
 }
@@ -668,6 +672,8 @@ u32 isp_set_xclk(struct device *dev, u32 xclk, u8 xclksel)
 		return -EINVAL;
 	}
 
+	usleep_range(2000, 2500);
+
 	return currentxclk;
 }
 EXPORT_SYMBOL(isp_set_xclk);
@@ -769,7 +775,8 @@ int isp_configure_interface(struct device *dev,
 		break;
 	case ISP_CSIA:
 		ispctrl_val |= ISPCTRL_PAR_SER_CLK_SEL_CSIA;
-		ispctrl_val &= ~ISPCTRL_PAR_BRIDGE_BENDIAN;
+		//ispctrl_val &= ~ISPCTRL_PAR_BRIDGE_BENDIAN;
+        ispctrl_val |= ISPCTRL_PAR_BRIDGE_BENDIAN;
 
 		if (config->u.csi.crc)
 			isp_csi2_ctrl_config_ecc_enable(&isp->isp_csi2, true);
@@ -969,6 +976,15 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 			 * For some reason resizer is always busy after boot up
 			 * do not check resizer busy now.
 			 */
+			if (CCDC_RESZ_CAPTURE(isp)){
+				bufs->wait_hs_vs = 0;
+				ispresizer_config_shadow_registers(&isp->isp_res);
+				ispresizer_enable(&isp->isp_res, 1);
+				ispccdc_enable(&isp->isp_ccdc, 1);
+
+			}
+
+			if (!(CCDC_RESZ_CAPTURE(isp))){
 			if ((isp->pipeline.modules & OMAP_ISP_RESIZER) &&
 			     !ispresizer_busy(&isp->isp_res) &&
 			     !ispresizer_is_enabled(&isp->isp_res)) {
@@ -983,6 +999,7 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 					&isp->isp_prev);
 				isppreview_enable(&isp->isp_prev, 1);
 			}
+		}
 		}
 	default:
 		/*
@@ -1073,13 +1090,31 @@ static irqreturn_t isp_isr(int irq, void *_pdev)
 		 * If CCDC is writing to memory stop CCDC here
 		 * preventig to write to any of our buffers.
 		 */
-		if (CCDC_CAPTURE(isp) || isp->config->u.csi.use_mem_read)
+		if ((CCDC_CAPTURE(isp) || isp->config->u.csi.use_mem_read || CCDC_RESZ_CAPTURE(isp)) && ispccdc_busy(&isp->isp_ccdc)) {
 			ispccdc_enable(&isp->isp_ccdc, 0);
+		}
 	}
 
 	if (irqstatus & CCDC_VD0) {
 		if (CCDC_CAPTURE(isp))
 			isp_buf_process(dev, bufs);
+		if(CCDC_RESZ_CAPTURE(isp)) {
+			int resizer_busy;
+			if (isp_wait(dev,((void *) ispccdc_busy), 0, 5000, &isp->isp_ccdc)) {
+				ispccdc_enable(&isp->isp_ccdc, 0);
+				ispccdc_enable(&isp->isp_ccdc, 1);
+				dev_info(dev, "\n\n ccdc won't become idle!\n\n");
+			}
+
+			resizer_busy = ispresizer_busy(&isp->isp_res);
+			if (!resizer_busy)
+				isp_buf_process(dev, bufs);
+			if (!ISP_BUFS_IS_EMPTY(bufs) && !resizer_busy) {
+				ispresizer_config_shadow_registers(&isp->isp_res);
+				ispresizer_enable(&isp->isp_res, 1);
+				ispccdc_enable(&isp->isp_ccdc, 1);
+			}
+		}
 
 		/* Enabling configured statistic modules */
 		if (!(irqstatus & H3A_AWB_DONE))
@@ -1365,7 +1400,7 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 {
 	struct isp_device *isp = dev_get_drvdata(dev);
 	unsigned long timeout = jiffies + ISP_STOP_TIMEOUT;
-	int reset = 0;
+	int reset = 1;
 
 	/* We need to disble the first LSC module */
 	timeout = jiffies + ISP_STOP_TIMEOUT;
@@ -1376,6 +1411,7 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 			reset = 1;
 			break;
 		}
+		msleep(1);
 	}
 	/* We can disable lsc now, If an error ocured during
 	 * stopping of the LSC sw reset the isp */
@@ -1406,6 +1442,7 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 			reset = 1;
 			break;
 		}
+		msleep(1);
 	}
 
 	/* Let's stop CCDC now. */
@@ -1418,6 +1455,7 @@ static int __isp_disable_modules(struct device *dev, int suspend)
 			reset = 1;
 			break;
 		}
+		msleep(1);
 	}
 
 	if (!reset) {
@@ -1549,7 +1587,7 @@ static void isp_set_buf(struct device *dev, struct isp_buf *buf)
 		isp_csi2_ctx_config_ping_addr(&isp->isp_csi2, 0, buf->isp_addr);
 		isp_csi2_ctx_config_pong_addr(&isp->isp_csi2, 0, buf->isp_addr);
 		isp_csi2_ctx_update(&isp->isp_csi2, 0, false);
-	} else if (CCDC_PREV_RESZ_CAPTURE(isp))
+	} else if (CCDC_PREV_RESZ_CAPTURE(isp) || CCDC_RESZ_CAPTURE(isp))
 		ispresizer_set_outaddr(&isp->isp_res, buf->isp_addr);
 	else if (CCDC_PREV_CAPTURE(isp))
 		isppreview_set_outaddr(&isp->isp_prev, buf->isp_addr);
@@ -1634,8 +1672,9 @@ static int isp_try_pipeline(struct device *dev,
 				pipe->ccdc_in = CCDC_RAW_GBRG;
 		} else if (pix_input->pixelformat == V4L2_PIX_FMT_YUYV ||
 			   pix_input->pixelformat == V4L2_PIX_FMT_UYVY) {
+			pipe->modules = OMAP_ISP_RESIZER | OMAP_ISP_CCDC;
 			pipe->ccdc_in = CCDC_YUV_SYNC;
-			pipe->ccdc_out = CCDC_OTHERS_MEM;
+			pipe->ccdc_out = CCDC_YUV_RSZ;
 		} else
 			return -EINVAL;
 	}
@@ -1714,8 +1753,19 @@ static int isp_try_pipeline(struct device *dev,
 	}
 
 	if (pipe->modules & OMAP_ISP_RESIZER) {
+
+		if (CCDC_RESZ_CAPTURE(isp))
+			pipe->rsz.in.path = RSZ_OTFLY_YUV;
+
+		pipe->rsz.in.image.width = pix_output->width;
+		pipe->rsz.in.image.height = pix_output->height;
+		pipe->rsz.in.image.pixelformat = pix_output->pixelformat;
+		pipe->rsz.in.crop.left = pipe->rsz.in.crop.top = 0;
+		pipe->rsz.in.crop.width = pipe->rsz.in.image.width;
+		pipe->rsz.in.crop.height = pipe->rsz.in.image.height;
 		pipe->rsz.out.image.width = wanted_width;
 		pipe->rsz.out.image.height = wanted_height;
+#if 0
 
 		if (pipe->rsz.in.path == RSZ_OTFLY_YUV) {
 			pipe->rsz.in.image.width =
@@ -1732,7 +1782,7 @@ static int isp_try_pipeline(struct device *dev,
 		pipe->rsz.in.crop.left = pipe->rsz.in.crop.top = 0;
 		pipe->rsz.in.crop.width = pipe->prv.out.crop.width;
 		pipe->rsz.in.crop.height = pipe->prv.out.crop.height;
-
+#endif
 		rval = ispresizer_try_pipeline(&isp->isp_res, &pipe->rsz);
 		if (rval) {
 			dev_dbg(dev, "The dimensions %dx%d are not"
@@ -1860,8 +1910,10 @@ static int isp_vbq_sync(struct videobuf_buffer *vb)
 	if (!vb->baddr || !dma || !dma->nr_pages ||
 	    dma->nr_pages > ISP_CACHE_FLUSH_PAGES_MAX)
 		flush_cache_all();
-	else
+	else {
 		outer_inv_range(vb->baddr, vb->baddr + vb->bsize);
+	}
+
 	return 0;
 }
 
@@ -1939,7 +1991,7 @@ static void isp_buf_process(struct device *dev, struct isp_bufs *bufs)
 			ispccdc_enable(&isp->isp_ccdc, 1);
 	} else {
 		/* Tell ISP not to write any of our buffers. */
-		if (CCDC_CAPTURE(isp))
+		if (CCDC_CAPTURE(isp) || CCDC_RESZ_CAPTURE(isp))
 			isp_disable_interrupts(dev);
 		if (isp->pipeline.modules == OMAP_ISP_CSIARX) {
 			isp_csi2_ctx_config_enabled(&isp->isp_csi2, 0, false);
@@ -2054,8 +2106,10 @@ int isp_buf_queue(struct device *dev, struct videobuf_buffer *vb,
 				isp_csi_lcm_readport_enable(&isp->isp_csi, 1);
 			}
 		} else {
+            if (!CCDC_RESZ_CAPTURE(isp)){
 			if (isp->pipeline.modules & OMAP_ISP_CCDC)
 				ispccdc_enable(&isp->isp_ccdc, 1);
+			}
 
 		if (isp->pipeline.modules == OMAP_ISP_CSIARX) {
 			isp_csi2_irq_ctx_set(&isp->isp_csi2, 1);
@@ -2293,7 +2347,7 @@ int isp_g_ctrl(struct device *dev, struct v4l2_control *a)
 		a->value = current_value;
 		break;
 	case V4L2_CID_PRIVATE_OMAP3ISP_CSI2MEM:
-		a->value = isp->isp_csi2.force_mem_out ? 1 : 0;
+		a->value = isp->isp_csi2.force_mem_out ? 0 : 0;
 		break;
 	default:
 		rval = -EINVAL;
@@ -2346,7 +2400,7 @@ int isp_s_ctrl(struct device *dev, struct v4l2_control *a)
 	case V4L2_CID_PRIVATE_OMAP3ISP_CSI2MEM:
 		/* NOTE: User must call again VIDIOC_S_FMT to make this
 			 effective */
-		isp->isp_csi2.force_mem_out = new_value ? true : false;
+        isp->isp_csi2.force_mem_out = new_value ? false : false;
 		break;
 	default:
 		rval = -EINVAL;
@@ -2823,6 +2877,9 @@ struct device *isp_get(void)
 /*	} else {
 		mutex_unlock(&isp_obj.isp_mutex);
 		return -EBUSY; */
+
+		/* ISP is using, set cm_autoidle_cam as 0 */
+		__raw_writel(0, OMAP2_L4_IO_ADDRESS(0x48004f30));
 	}
 	isp->ref_count++;
 	mutex_unlock(&(isp->isp_mutex));
@@ -2862,6 +2919,9 @@ int isp_put(void)
 				isp_tmp_buf_free(&pdev->dev);
 			isp_release_resources(&pdev->dev);
 			isp_disable_clocks(&pdev->dev);
+
+			/* ISP is not using, set cm_autoidle_cam as 1 */
+			__raw_writel(1, OMAP2_L4_IO_ADDRESS(0x48004f30));
 		}
 	}
 	mutex_unlock(&(isp->isp_mutex));

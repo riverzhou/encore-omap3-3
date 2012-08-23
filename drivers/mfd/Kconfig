@@ -218,6 +218,10 @@ config TWL4030_POWER
 	  and load scripts controlling which resources are switched off/on
 	  or reset when a sleep, wakeup or warm reset event occurs.
 
+config TWL4030_POWEROFF
+        bool "TWL4030 device poweroff"
+        depends on TWL4030_CORE
+
 config TWL6030_POWER
 	bool "Support power resources on TWL6030 family chips"
 	depends on TWL4030_CORE

@@ -25,6 +25,7 @@ struct omap2_hsmmc_info {
 	bool	no_off_init;	/* no power off when not in MMC sleep state */
 	bool	vcc_aux_disable_is_sleep; /* Regulator off remapped to sleep */
 	int	gpio_cd;	/* or -EINVAL */
+	bool    cd_active_high; /* active high card detect */
 	int	gpio_wp;	/* or -EINVAL */
 	char	*name;		/* or NULL for default */
 	struct device *dev;	/* returned: pointer to mmc adapter */
@@ -32,9 +33,21 @@ struct omap2_hsmmc_info {
 	struct mmc_platform_data *mmc_data;
 	/* Remux (pad configuration) when powering on/off */
 	void (*remux)(struct device *dev, int slot, int power_on);
+//&*&*&*SJ1_20110607, Add SIM card detection.
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+	int	gpio_sim_cd;	/* or -EINVAL */
+#endif /* End CONFIG_SIM_CARD_DETECTION */
+//&*&*&*SJ2_20110607, Add SIM card detection.	
 	/* init some special card */
 	void (*init_card)(struct mmc_card *card);
 };
+
+//add mike.ma
+#ifdef CONFIG_TIWLAN_SDIO
+int omap_wifi_status_register(void (*callback)(int card_present,
+        void *dev_id), void *dev_id);
+int omap_wifi_status(struct device *dev, int slot);
+#endif//CONFIG_TIWLAN_SDIO
 
 #if defined(CONFIG_MMC_OMAP_HS) || defined(CONFIG_MMC_OMAP_HS_MODULE)
 

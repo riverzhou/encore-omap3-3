@@ -259,6 +259,7 @@ IMG_VOID DisableSGXClocks(SYS_DATA *psSysData)
 #endif
 }
 
+
 #if (defined(DEBUG) || defined(TIMING)) && !defined(PVR_NO_OMAP_TIMER)
 #if defined(PVR_OMAP_USE_DM_TIMER_API)
 #define	GPTIMER_TO_USE 11
@@ -564,3 +565,4 @@ IMG_VOID DisableSystemClocks(SYS_DATA *psSysData)
 
 	ReleaseGPTimer(psSysSpecData);
 }
+

@@ -18,6 +18,9 @@
 #include <asm/mach/mmc.h>
 #include <plat/board.h>
 
+#ifdef CONFIG_TIWLAN_SDIO
+#include <linux/mmc/card.h>
+#endif
 #define OMAP15XX_NR_MMC		1
 #define OMAP16XX_NR_MMC		2
 #define OMAP1_MMC_SIZE		0x080
@@ -25,6 +28,8 @@
 #define OMAP1_MMC2_BASE		0xfffb7c00	/* omap16xx only */
 
 #define OMAP24XX_NR_MMC		2
+#define OMAP34XX_NR_MMC		3 
+#define OMAP44XX_NR_MMC		5 
 #define OMAP2420_MMC_SIZE	OMAP1_MMC_SIZE
 #define OMAP2_MMC1_BASE		0x4809c000
 
@@ -112,6 +117,7 @@ struct omap_mmc_platform_data {
 		unsigned features;
 
 		int switch_pin;			/* gpio (card detect) */
+                bool cd_active_high;            /* active high card detect */
 		int gpio_wp;			/* gpio (write protect) */
 
 		int (*set_bus_mode)(struct device *dev, int slot, int bus_mode);
@@ -150,7 +156,23 @@ struct omap_mmc_platform_data {
 
 		unsigned int ban_openended:1;
 
+#ifdef CONFIG_TIWLAN_SDIO
+		struct embedded_sdio_data *embedded_sdio;
+		int (*register_status_notify)
+			(void (*callback)(int card_present, void *dev_id),
+			void *dev_id);
+#endif
+//&*&*&*SJ1_20110607, Add SIM card detection.
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+		int sim_switch_pin;			/* gpio (card detect) */
+#endif /* End (CONFIG_SIM_CARD_DETECTION) */
+//&*&*&*SJ2_20110607, Add SIM card detection.
 	} slots[OMAP_MMC_MAX_SLOTS];
+//&*&*&*SJ1_20110607, Add SIM card detection.
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+	int (* init_sim)(struct device *dev);
+#endif /* End CONFIG_SIM_CARD_DETECTION */
+//&*&*&*SJ2_20110607, Add SIM card detection.
 };
 
 /* called from board-specific card detection service routine */

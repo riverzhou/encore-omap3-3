@@ -73,6 +73,9 @@ obj-$(CONFIG_VIDEO_M5MOLS)	+= m5mols/
 
 obj-$(CONFIG_VIDEO_IMX046) += imx046.o
 obj-$(CONFIG_VIDEO_LV8093) += lv8093.o
+
+obj-$(CONFIG_VIDEO_MT9V115)      += mt9v115.o
+obj-$(CONFIG_VIDEO_S5K5CA)      += s5k5ca.o
 obj-y += isp/
 obj-$(CONFIG_VIDEO_OMAP3) += omap34xxcam.o
 obj-$(CONFIG_SOC_CAMERA_IMX074)		+= imx074.o

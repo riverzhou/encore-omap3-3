@@ -57,12 +57,22 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 extern void printascii(char *);
 #endif
 
+//Henry: Change debug message level.
+#if 0
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL CONFIG_DEFAULT_MESSAGE_LOGLEVEL
 
 /* We show everything that is MORE important than this.. */
 #define MINIMUM_CONSOLE_LOGLEVEL 1 /* Minimum loglevel we let people use */
 #define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_DEBUG */
+#else //For CL1-ICS series
+/* printk's without a loglevel use this.. */
+#define DEFAULT_MESSAGE_LOGLEVEL 1  /* KERN_WARNING */
+
+/* We show everything that is MORE important than this.. */
+#define MINIMUM_CONSOLE_LOGLEVEL 1  /* Minimum loglevel we let people use */
+#define DEFAULT_CONSOLE_LOGLEVEL 1  /* anything MORE serious than KERN_DEBUG */
+#endif
 
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 
@@ -588,8 +598,13 @@ early_param("ignore_loglevel", ignore_loglevel_setup);
 static void _call_console_drivers(unsigned start,
 				unsigned end, int msg_log_level)
 {
-	if ((msg_log_level < console_loglevel || ignore_loglevel) &&
+	//Henry: Change debug message level
+	if ((msg_log_level < console_loglevel ) &&
 			console_drivers && start != end) {
+#if 0
+ 	if ((msg_log_level < console_loglevel || ignore_loglevel) &&
+ 			console_drivers && start != end) {
+#endif
 		if ((start & LOG_BUF_MASK) > (end & LOG_BUF_MASK)) {
 			/* wrapped write */
 			__call_console_drivers(start & LOG_BUF_MASK,

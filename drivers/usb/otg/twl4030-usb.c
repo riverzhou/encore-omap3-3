@@ -37,8 +37,11 @@
 #include <linux/i2c/twl.h>
 #include <linux/regulator/consumer.h>
 #include <linux/err.h>
+#include <linux/wakelock.h>
 #include <linux/notifier.h>
 #include <linux/slab.h>
+//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
+#include <linux/earlysuspend.h>
 
 /* Register defines */
 
@@ -143,6 +146,26 @@
 #define PMBR1				0x0D
 #define GPIO_USB_4PIN_ULPI_2430C	(3 << 0)
 
+#define TPS65921_USB_DTCT_CTRL		0x02
+#define TPS65921_USB_CHG_DET_EN_SW	(1 << 7)
+#define TPS65921_USB_DET_STS_MASK	(3 << 2)
+#define TPS65921_USB_DET_STS_100MA	(1 << 2)
+#define TPS65921_USB_DET_STS_500MA	(2 << 2)
+#define TPS65921_USB_HW_CHRG_DET_EN	(1 << 0)
+
+#define TPS65921_USB_SW_CHRG_CTRL	0x03
+#define TPS65921_CHGD_DET_EN_SW		(1 << 7)
+#define TPS65921_CHGD_SERX_DM_LOWV	(1 << 5)
+#define TPS65921_CHGD_SERX_DP_LOWV	(1 << 4)
+
+#define TPS65921_ACCISR1		0x05
+#define TPS65921_ACCIMR1		0x06
+#define TPS65921_USB_CHRG_TYPE_ISR1	(1 << 0)
+
+//&*&*&*AL1_20110523, USB OTG/Charger switch on EVT3 of EP10
+#define OTG_EN_1V8     156
+#define CHG_OFFMODE    34
+//&*&*&*AL2_20110523, USB OTG/Charger switch on EVT3 of EP10
 struct twl4030_usb {
 	struct otg_transceiver	otg;
 	struct device		*dev;
@@ -163,10 +186,17 @@ struct twl4030_usb {
 	bool			vbus_supplied;
 	u8			asleep;
 	bool			irq_enabled;
+	struct early_suspend		early_suspend;
+	int enter_early_suspend;//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
 };
 
+static struct wake_lock usb_lock;
 /* internal define on top of container_of */
 #define xceiv_to_twl(x)		container_of((x), struct twl4030_usb, otg);
+
+static struct twl4030_usb *g_twl_usb;
+
+extern void SendPowerbuttonEvent( void );
 
 /*-------------------------------------------------------------------------*/
 
@@ -245,6 +275,77 @@ twl4030_usb_clear_bits(struct twl4030_usb *twl, u8 reg, u8 bits)
 }
 
 /*-------------------------------------------------------------------------*/
+/* <-- LH_SWRD_CL1_Henry@2011.8.6 delete Vibrator_EN and CCM_PWDN2 control from twl4030_otg_enable  */	
+#if 0
+int twl4030_otg_enable(int enable)
+{
+	printk("[twl4030-usb]Enter %s, enable:%d.\n", __FUNCTION__, enable);
+	if(enable)
+	{
+		gpio_set_value(OTG_EN_1V8, 1);
+		gpio_set_value(CHG_OFFMODE, 1);
+	}
+	else
+	{
+		gpio_set_value(OTG_EN_1V8, 0);
+		gpio_set_value(CHG_OFFMODE, 0);
+	}
+	
+	return 0;
+}
+#else
+int twl4030_otg_enable(int enable)
+{
+	return 0;
+}
+#endif
+/*  LH_SWRD_CL1_Henry@2011.8.6 delete Vibrator_EN and CCM_PWDN2 control from twl4030_otg_enable  -->*/	
+
+EXPORT_SYMBOL(twl4030_otg_enable);
+
+int twl4030_cable_type_detection(void)
+{
+	int dtct = 0;
+	enum usb_xceiv_events stat = USB_EVENT_NONE;
+	int status;
+	//printk("[kernel3.0]Entry-----------------%s\n",__func__);
+	if(g_twl_usb == NULL)
+		return stat;
+	/*
+	 * Why sleep here instead of waiting for ACCISR1 interrupt?
+	 *
+	 * Upon cable plugging the VBUS and GND signals are the first to
+	 * contact the connector pins, leaving D+/D- floating for a while so
+	 * that the charger D+/D- short cannot be detected. This leaves us
+	 * with the only option to wait a while after VBUS RISE IRQ, praying
+	 * that cable will be fully inserted by then.
+	 */
+
+	status = twl4030_readb(g_twl_usb, TWL4030_MODULE_PM_MASTER,
+			STS_HW_CONDITIONS);
+	if (status < 0)
+		dev_err(g_twl_usb->dev, "USB link status err %d\n", status);
+	else if (status & (BIT(7) | BIT(2))) {
+		if (status & BIT(2))
+			stat = USB_EVENT_ID;
+		else {
+			/* Read charger detection status */
+			dtct = twl4030_readb(g_twl_usb, TWL4030_MODULE_MAIN_CHARGE,
+							TPS65921_USB_DTCT_CTRL);
+			if ((dtct & TPS65921_USB_DET_STS_MASK) != TPS65921_USB_DET_STS_500MA)
+				stat = USB_EVENT_VBUS;
+			else
+				stat = USB_EVENT_CHARGER;
+			printk("[twl4030-usb]USB_DTCT_CTRL=0x%02x, status=0x%02x\n", dtct, status);
+		}
+	} else
+		stat = USB_EVENT_NONE;
+
+	if(!wake_lock_active(&usb_lock))
+		wake_lock(&usb_lock);
+	return stat;
+}
+EXPORT_SYMBOL(twl4030_cable_type_detection);
 
 static enum usb_xceiv_events twl4030_usb_linkstat(struct twl4030_usb *twl)
 {
@@ -483,6 +584,20 @@ fail1:
 	twl->usb3v1 = NULL;
 	return -ENODEV;
 }
+/* <-- LH_SWRD_CL1_Henry@2011.7.25 work around way to make adb connect properly */
+void read_vbus_power(u8 *data3v1,  u8* data1v8,  u8* data1v5)
+{
+twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, data3v1, VUSB3V1_DEV_GRP);
+twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, data1v8, VUSB1V8_DEV_GRP);
+twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, data1v5, VUSB1V5_DEV_GRP);
+}
+void write_vbus_power(u8 data3v1, u8 data1v8, u8 data1v5)
+{
+twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, data3v1, VUSB3V1_DEV_GRP);
+twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, data1v8, VUSB1V8_DEV_GRP);
+twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, data1v5, VUSB1V5_DEV_GRP);
+}
+/* LH_SWRD_CL1_Henry@2011.7.25 work around way to make adb connect properly --> */
 
 static ssize_t twl4030_usb_vbus_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -500,12 +615,32 @@ static ssize_t twl4030_usb_vbus_show(struct device *dev,
 }
 static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
 
+unsigned int previous_status=0;
+unsigned long previous_timeout=0;
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
 	int status;
 
 	status = twl4030_usb_linkstat(twl);
+/* <-- LH_SWRD_CL1_Henry@2011.9.30 improve USB connection stability (not break down frequently) */
+/*
+	timeout = previous_timeout + msecs_to_jiffies(400);
+	if ((previous_status != status) && (time_before(jiffies, timeout)))
+		{
+		previous_status = status;
+		previous_timeout = jiffies;
+		return;		
+		}
+	else
+*/	
+		{
+		previous_status = status;
+		previous_timeout = jiffies;
+		}		
+	msleep(100);
+	status = twl4030_usb_linkstat(twl);
+/* LH_SWRD_CL1_Henry@2011.9.30 improve USB storage connection stability (not break down frequently) -->*/
 	if (status >= 0) {
 		/* FIXME add a set_power() method so that B-devices can
 		 * configure the charger appropriately.  It's not always
@@ -518,10 +653,28 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		 * USB_LINK_VBUS state.  musb_hdrc won't care until it
 		 * starts to handle softconnect right.
 		 */
-		if (status == USB_EVENT_NONE)
+
+		if (status == USB_EVENT_NONE) {
+			//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
 			twl4030_phy_suspend(twl, 0);
-		else
+			if(twl->enter_early_suspend == 1)
+			{
+				SendPowerbuttonEvent();
+				printk("[twl4030-usb]Enter %s, send power suspend event.\n", __FUNCTION__);
+			}
+			if(wake_lock_active(&usb_lock))
+				wake_unlock(&usb_lock);
+			
+			
+
+			}else{
+			
+			if(!wake_lock_active(&usb_lock))
+				wake_lock(&usb_lock);
+			
 			twl4030_phy_resume(twl);
+			}
+
 
 		atomic_notifier_call_chain(&twl->otg.notifier, status,
 				twl->otg.gadget);
@@ -594,6 +747,28 @@ static int twl4030_set_host(struct otg_transceiver *x, struct usb_bus *host)
 	return 0;
 }
 
+//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void twl4030_usb_early_suspend(struct early_suspend *handler)
+{
+	struct twl4030_usb	*twl;
+
+	twl = container_of(handler, struct twl4030_usb, early_suspend);
+	twl->enter_early_suspend = 1;
+	printk("[twl4030-usb]Enter %s.\n", __FUNCTION__);
+}
+
+static void twl4030_usb_late_resume(struct early_suspend *handler)
+{
+	struct twl4030_usb	*twl;
+
+	twl = container_of(handler, struct twl4030_usb, early_suspend);
+	twl->enter_early_suspend = 0;
+	printk("[twl4030-usb]Enter %s.\n", __FUNCTION__);
+}
+#endif
+//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
+
 static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 {
 	struct twl4030_usb_data *pdata = pdev->dev.platform_data;
@@ -619,6 +794,14 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	twl->usb_mode		= pdata->usb_mode;
 	twl->vbus_supplied	= false;
 	twl->asleep = 1;
+
+//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	twl->early_suspend.suspend = twl4030_usb_early_suspend;
+	twl->early_suspend.resume = twl4030_usb_late_resume;
+	register_early_suspend(&twl->early_suspend);
+#endif
+//&*&*&*Beacon_20120508,Add earlysuspend mechanism of usb
 
 	/* init spinlock for workqueue */
 	spin_lock_init(&twl->lock);
@@ -646,6 +829,7 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 	 * need both handles, otherwise just one suffices.
 	 */
 	twl->irq_enabled = true;
+	g_twl_usb = twl;//&*&*&*Beacon_20120320
 	status = request_threaded_irq(twl->irq, NULL, twl4030_usb_irq,
 			IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
 			"twl4030_usb", twl);
@@ -655,7 +839,8 @@ static int __devinit twl4030_usb_probe(struct platform_device *pdev)
 		kfree(twl);
 		return status;
 	}
-
+	//&*&*&*Beacon_20120326
+	wake_lock_init(&usb_lock, WAKE_LOCK_SUSPEND, "twl4030_musb_wake_lock");
 	/* Power down phy or make it work according to
 	 * current link state.
 	 */
@@ -695,6 +880,8 @@ static int __exit twl4030_usb_remove(struct platform_device *pdev)
 	regulator_put(twl->usb1v5);
 	regulator_put(twl->usb1v8);
 	regulator_put(twl->usb3v1);
+
+	wake_lock_destroy(&usb_lock);
 
 	kfree(twl);
 

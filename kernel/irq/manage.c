@@ -462,6 +462,65 @@ out:
 }
 EXPORT_SYMBOL(enable_irq);
 
+/* <-- LH_SWRD_CL1_Henry@2011.8.14 add enable/disable irq function  for solving mg touch suspend/resume issue */		
+/*
+int __set_tg_irq_status(struct irq_desc *desc, unsigned int irq, bool resume)
+{
+	if (resume)
+		{		
+		desc->istate &= ~IRQS_SUSPENDED;
+		desc->depth = 0;
+		}
+	else
+		{
+		desc->istate |= IRQS_SUSPENDED;
+		desc->depth = 1;	
+		}
+		check_irq_resend(desc, irq);
+	return desc->istate;
+}
+*/
+
+/* Henry Li@2011.8.13 set  tg irq status */
+int  set_tg_irq_status(unsigned int irq, bool enable)
+{
+	struct irq_desc *desc = irq_to_desc(irq);
+#if 0
+	unsigned long flags;
+	int value;
+	
+	if (!desc)
+		return 0xffffffff;
+	chip_bus_lock(irq, desc);
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	value=__set_tg_irq_status(desc, irq, enable);
+	
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+	chip_bus_sync_unlock(irq, desc);
+#else
+	if (!desc)
+		return 0xffffffff;
+	if (enable)
+		{
+		//enable_irq(irq);
+		/* Prevent probing on this irq: */
+		irq_settings_set_noprobe(desc);
+		irq_enable(desc);
+		check_irq_resend(desc, irq);
+		desc->depth = 0;
+		}
+	else
+		{
+		//disable_irq(irq);
+		irq_disable(desc);
+		desc->depth = 1;
+		}
+#endif
+}
+EXPORT_SYMBOL(set_tg_irq_status);
+/*  LH_SWRD_CL1_Henry@2011.8.14 add enable/disable irq function  for solving mg touch suspend/resume issue -->*/		
+
+
 static int set_irq_wake_real(unsigned int irq, unsigned int on)
 {
 	struct irq_desc *desc = irq_to_desc(irq);

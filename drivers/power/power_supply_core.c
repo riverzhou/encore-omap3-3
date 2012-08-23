@@ -205,7 +205,11 @@ int power_supply_register(struct device *parent, struct power_supply *psy)
 	if (rc)
 		goto create_triggers_failed;
 
-	power_supply_changed(psy);
+	//&*&*&*Beacon_20120412
+	/* 
+	* Don't enable the function, It will cause charging work queue freezing when boot-up.
+	*/
+	//power_supply_changed(psy);
 
 	goto success;
 

@@ -96,22 +96,6 @@ enum omap_color_mode {
 	OMAP_DSS_COLOR_XRGB16_1555	= 1 << 18, /* xRGB16 - 1555 */
 };
 
-/* Writeback data structures */
-enum omap_writeback_source {
-	OMAP_WB_LCD1		= 0,
-	OMAP_WB_TV		= 1,
-	OMAP_WB_LCD2		= 2,
-	OMAP_WB_GFX		= 3,
-	OMAP_WB_VID1		= 4,
-	OMAP_WB_VID2		= 5,
-	OMAP_WB_VID3		= 6
-};
-
-enum omap_writeback_mode {
-	OMAP_WB_CAPTURE_MODE	= 0x0,
-	OMAP_WB_MEM2MEM_MODE	= 0x1,
-};
-
 enum omap_lcd_display_type {
 	OMAP_DSS_LCD_DISPLAY_STN,
 	OMAP_DSS_LCD_DISPLAY_TFT,
@@ -616,11 +600,6 @@ struct omap_dss_device {
 
 	struct blocking_notifier_head state_notifiers;
 
-	/* HDMI specific */
-	void (*enable_device_detect)(struct omap_dss_device *dssdev, u8 enable);
-	bool (*get_device_detect)(struct omap_dss_device *dssdev);
-	int (*get_device_connected)(struct omap_dss_device *dssdev);
-
 	/* platform specific  */
 	int (*platform_enable)(struct omap_dss_device *dssdev);
 	void (*platform_disable)(struct omap_dss_device *dssdev);
@@ -680,12 +659,6 @@ struct omap_dss_driver {
 	int (*get_modedb)(struct omap_dss_device *dssdev,
 			  struct fb_videomode *modedb,
 			  int modedb_len);
-
-	void (*enable_device_detect)(struct omap_dss_device *dssdev, u8 enable);
-	bool (*get_device_detect)(struct omap_dss_device *dssdev);
-	int (*get_device_connected)(struct omap_dss_device *dssdev);
-
-
 	int (*set_mode)(struct omap_dss_device *dssdev,
 			struct fb_videomode *mode);
 

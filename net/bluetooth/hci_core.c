@@ -510,10 +510,13 @@ int hci_dev_open(__u16 dev)
 
 	hci_req_lock(hdev);
 
+   //remove rfkill_blocked
+	/*
 	if (hdev->rfkill && rfkill_blocked(hdev->rfkill)) {
 		ret = -ERFKILL;
 		goto done;
 	}
+	*/
 
 	if (test_bit(HCI_UP, &hdev->flags)) {
 		ret = -EALREADY;
@@ -1530,6 +1533,8 @@ int hci_register_dev(struct hci_dev *hdev)
 
 	hci_register_sysfs(hdev);
 
+   //remove rfkill_register
+	/*
 	hdev->rfkill = rfkill_alloc(hdev->name, &hdev->dev,
 				RFKILL_TYPE_BLUETOOTH, &hci_rfkill_ops, hdev);
 	if (hdev->rfkill) {
@@ -1538,7 +1543,7 @@ int hci_register_dev(struct hci_dev *hdev)
 			hdev->rfkill = NULL;
 		}
 	}
-
+   */
 	set_bit(HCI_AUTO_OFF, &hdev->flags);
 	set_bit(HCI_SETUP, &hdev->flags);
 	queue_work(hdev->workqueue, &hdev->power_on);
@@ -1582,8 +1587,11 @@ int hci_unregister_dev(struct hci_dev *hdev)
 	hci_notify(hdev, HCI_DEV_UNREG);
 
 	if (hdev->rfkill) {
+		//&*&*&*Simon: remove rfkill_unregister
+	/*
 		rfkill_unregister(hdev->rfkill);
 		rfkill_destroy(hdev->rfkill);
+	*/
 	}
 
 	hci_unregister_sysfs(hdev);

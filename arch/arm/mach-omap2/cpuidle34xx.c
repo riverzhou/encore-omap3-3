@@ -119,7 +119,7 @@ static int omap3_enter_idle(struct cpuidle_device *dev,
 		pwrdm_for_each_clkdm(core_pd, _cpuidle_deny_idle);
 	}
 
-	/* Execute ARM wfi */
+	/* Execute ARM wfi */	
 	omap_sram_idle(false);
 
 	/* Re-allow idle for C1 */

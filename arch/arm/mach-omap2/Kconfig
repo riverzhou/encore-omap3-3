@@ -69,11 +69,18 @@ config SOC_OMAP2430
 	default y
 	select ARCH_OMAP_OTG
 
+config ARCH_OMAP34XX
+	bool "OMAP34xx Based System"
+	depends on ARCH_OMAP3
+	select USB_ARCH_HAS_EHCI
 config SOC_OMAP3430
 	bool "OMAP3430 support"
 	depends on ARCH_OMAP3
 	default y
 	select ARCH_OMAP_OTG
+config ARCH_OMAP3621
+	bool "OMAP3621 support"
+	depends on ARCH_OMAP3 && ARCH_OMAP34XX
 
 config SOC_OMAPTI816X
 	bool "TI816X support"
@@ -186,6 +193,33 @@ config MACH_OMAP3EVM
 	default y
 	select OMAP_PACKAGE_CBB
 
+config WIFI_CONTROL_FUNC
+        bool "Enable WiFi control function abstraction"
+	depends on MACH_OMAP_4430SDP || MACH_OMAP_ZOOM2 || MACH_OMAP_ZOOM3
+        select WIRELESS_EXT
+        select WEXT_CORE
+        select WEXT_PROC
+        select WEXT_PRIV
+        default Y
+        help
+           Enables Power/Reset/Carddetect function abstraction
+config TIWLAN_SDIO
+        bool "TI WLAN Enhanced SDIO Contoller support"
+        depends on MMC_OMAP || MMC_OMAP_MODULE || MMC_OMAP_HS || MMC_OMAP_HS_MODULE
+        help
+           Say Y here if you want to be able to use TI's WLAN device using the
+           SDIO interface. If unsure, say N.
+config TIWLAN_MMC_CONTROLLER
+        int "MMC Controller number that TI WLAN chip is connected to"
+        range 1 5
+        depends on TIWLAN_SDIO
+        default "5"
+        help
+          Choose the number of the MMC controller that TI WLAN chip is
+          connected to. TI WLAN has SDIO host controller that will control
+          this MMC port.
+
+
 config MACH_OMAP3517EVM
 	bool "OMAP3517/ AM3517 EVM board"
 	depends on ARCH_OMAP3
@@ -265,6 +299,50 @@ config MACH_OMAP_ZOOM3
 	select SERIAL_CORE_CONSOLE
 	select SERIAL_8250_CONSOLE
 	select REGULATOR_FIXED_VOLTAGE
+
+config CL1_DVT_BOARD
+	bool "CONFIG CL1 DVT board"
+	default y
+	
+config CL1_3G_BOARD
+	bool "CONFIG CL1 3G board"
+	default n
+	help
+	if you want compile for CL1 3g board please
+	choose this item,or don't select it
+	default,this item is not select
+	
+config MACH_OMAP3621_EVT1A
+	bool "OMAP3621 BOXER board revision EVT1A"
+	depends on ARCH_OMAP3 && ARCH_OMAP34XX
+	select ARCH_OMAP3621
+
+config WLAN_POWER_EVT1
+	bool "WLAN power support"
+	depends on MACH_OMAP3621_EVT1A
+	default "y"
+	help
+	  Has to be set for EVT1A board.
+
+choice
+	bool "SDRAM DDR memory"
+	depends on ARCH_OMAP3 && ARCH_OMAP34XX
+
+config MACH_SDRAM_HYNIX_H8MBX00U0MER0EM_OR_SAMSUNG_K4X4G303PB
+	bool "Hynix H8MBX00U0MER0EM DDR memory"
+
+config MACH_SDRAM_HYNIX_H8MBX00U0MER0EM
+	bool "Hynix H8MBX00U0MER0EM DDR memory"
+
+config MACH_SDRAM_SAMSUNG_K4X4G303PB
+	bool "Saumsung K4X4G303PB DDR memory"
+
+#&*&*&*SJ1_20110422
+config MACH_SDRAM_ELPIDA_EDK4332C2PB
+	bool "ELPIDA Pop EDK4332C2PB DDR memory"
+#&*&*&*SJ2_20110422
+	
+endchoice
 
 config MACH_CM_T35
 	bool "CompuLab CM-T35 module"
@@ -455,6 +533,12 @@ config OMAP4_ARM_ERRATA_751472
 	  This is handled for HS devices in the PPA code and does not need to be
 	  enabled."
 
+# /* <--LH_SWRD_CL1_Mervins@2012.04.02:Add for share region--> */
+config PROCFS_DISPLAY_SW_HW_VERSION
+	bool "Implement /proc file to display software and hardware version info." 
+	default y
+	
+	
 config OMAP4_ARM_ERRATA_743622
 	bool "Enabled the workaround for ARM errata 743622 on GP devices"
 	default y

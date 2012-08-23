@@ -35,6 +35,7 @@
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_runtime.h>
+#include <linux/slab.h>
 
 #include <plat/dma.h>
 #include <mach/hardware.h>
@@ -42,6 +43,7 @@
 #include <plat/mmc.h>
 #include <plat/cpu.h>
 #include <plat/omap-pm.h>
+#include <linux/earlysuspend.h>
 
 /* OMAP HSMMC Host Controller Registers */
 #define OMAP_HSMMC_SYSCONFIG	0x0010
@@ -65,6 +67,7 @@
 #define OMAP_HSMMC_ADMA_ES	0x0154
 #define OMAP_HSMMC_ADMA_SAL	0x0158
 
+int g_mmc1_poll_cnt = 0;	//&*&*&*SJ_20110721.
 #define VS18			(1 << 26)
 #define VS30			(1 << 25)
 #define SDVS18			(0x5 << 9)
@@ -131,6 +134,10 @@
 
 #define SDMA_XFER	1
 #define ADMA_XFER	2
+#define DMA_THRESHOLD  511
+#define POLLING_MAX_LOOPS  10000
+#define DMA_TYPE_NODMA       0
+
 /*
  * According to TRM, It is possible to transfer
  * upto 64KB per ADMA table entry.
@@ -162,6 +169,9 @@
 #define OMAP_MMC_SLEEP_TIMEOUT		1000
 #define OMAP_MMC_OFF_TIMEOUT		8000
 
+#if defined (CONFIG_SD_CARD_WAKEUP) 
+extern void SendPowerbuttonEvent( void );
+#endif
 /*
  * One controller can have multiple slots, like on some omap boards using
  * omap.c controller driver. Luckily this is not currently done on any known
@@ -234,6 +244,7 @@ struct omap_hsmmc_host {
 	struct	omap_mmc_platform_data	*pdata;
 };
 
+#if 0
 static void omap_hsmmc_status_notify_cb(int card_present, void *dev_id)
 {
 	struct omap_hsmmc_host *host = (struct omap_hsmmc_host *)dev_id;
@@ -257,6 +268,69 @@ static void omap_hsmmc_status_notify_cb(int card_present, void *dev_id)
 		mmc_detect_change(host->mmc, 0);
 	}
 }
+#endif
+
+//&*&*&*SJ1_20110607, Add SIM card detection.		
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+
+#include <linux/mmc/card_socket.h>
+struct sim_detect_dev	 *the_sim_detect = NULL;
+
+static int __init sim_detect_alloc(void)
+{
+	struct sim_detect_dev *sim_det;
+
+	sim_det = kzalloc(sizeof(struct sim_detect_dev), GFP_KERNEL);
+	if (!sim_det)
+		return -ENOMEM;
+
+	the_sim_detect = sim_det;
+	return 0;
+}
+
+static ssize_t print_sim_card_switch_name(struct switch_dev *sdev, char *buf)
+{	
+	return sprintf(buf, "%s\n", "sim_card_socket");
+}
+
+static ssize_t print_sim_card_switch_state(struct switch_dev *sdev, char *buf)
+{ 
+	return sprintf(buf, "%s\n", (g_sim_carddetect_status ? "closed" : "open"));
+}
+
+static int omap_hsmmc_sim_card_detect(struct device *dev, int slot)
+{
+	struct omap_mmc_platform_data *mmc = dev->platform_data;
+
+	static unsigned booting_up=1;
+	unsigned ret;
+
+	mmc->slots[0].cd_active_high = true;
+	/* NOTE: assumes card detect signal is active-hi */
+	ret = !gpio_get_value_cansleep(mmc->slots[0].sim_switch_pin) 
+                                        ^ mmc->slots[0].cd_active_high;//&*&*&*JJ_20110420
+	if (booting_up) {
+		booting_up = 0;
+		g_sim_carddetect_status = ret;
+//		printk("[twl_sim_card_detect]g_sim_carddetect_status = %d\n", g_sim_carddetect_status);
+		ret = 1;	//Fix first bootup "Waiting for root device /dev/mmcblk1p2..." issue. 
+	}
+
+	return ret; 
+}
+
+//&*&*&*SJ1_20110628, update SIMCard socket switch state.
+void update_sim_card_switch_state(void)
+{
+	g_sim_carddetect_status = gpio_get_value_cansleep(TWL4030_GPIO1);
+	switch_set_state(&the_sim_detect->sdev, g_sim_carddetect_status);
+}
+
+EXPORT_SYMBOL(update_sim_card_switch_state);
+//&*&*&*SJ2_20110628, update SIMCard socket switch state.
+
+#endif
+//&*&*&*SJ2_20110607, Add SIM card detection.	
 
 static int
 omap_hsmmc_prepare_data(struct omap_hsmmc_host *host, struct mmc_request *req);
@@ -491,6 +565,7 @@ static int omap_hsmmc_reg_get(struct omap_hsmmc_host *host)
 		}
 	} else {
 		host->vcc = reg;
+#if 0
 		ocr_value = mmc_regulator_get_ocrmask(reg);
 		if (!mmc_slot(host).ocr_mask) {
 			mmc_slot(host).ocr_mask = ocr_value;
@@ -502,6 +577,9 @@ static int omap_hsmmc_reg_get(struct omap_hsmmc_host *host)
 				return -EINVAL;
 			}
 		}
+#else
+		mmc_slot(host).ocr_mask = mmc_regulator_get_ocrmask(reg);
+#endif
 
 		/* Allow an aux regulator */
 		reg = regulator_get(host->dev, "vmmc_aux");
@@ -520,7 +598,10 @@ static int omap_hsmmc_reg_get(struct omap_hsmmc_host *host)
 		*/
 		if (regulator_is_enabled(host->vcc) > 0) {
 			regulator_enable(host->vcc);
-			regulator_disable(host->vcc);
+/*<-- LH_SWRD_CL1_Henry@2012.3.26 Make VMMC1 on always for camera -->*/			
+			if (strcmp (mmc_hostname(host->mmc), "mmc1") != 0)
+				regulator_disable(host->vcc);
+/*<-- LH_SWRD_CL1_Henry@2012.3.26 Make VMMC1 on always for camera -->*/			
 		}
 		if (host->vcc_aux) {
 			if (regulator_is_enabled(reg) > 0) {
@@ -612,6 +693,31 @@ err_free_sp:
 	return ret;
 }
 
+//&*&*&*SJ1_20110607, Add SIM card detection.		
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+int g_sim_carddetect_status = 0;
+EXPORT_SYMBOL(g_sim_carddetect_status);
+static int omap_hsmmc_gpio_sim_init(struct omap_mmc_platform_data *pdata)
+{
+	int ret;
+
+	if (gpio_is_valid(pdata->slots[0].sim_switch_pin)) {
+		pdata->slots[0].card_detect = omap_hsmmc_sim_card_detect;
+		pdata->slots[0].card_detect_irq =
+				gpio_to_irq(pdata->slots[0].sim_switch_pin);
+		ret = gpio_request(pdata->slots[0].sim_switch_pin, "mmc_cd");
+		if (ret)
+			return ret;
+		ret = gpio_direction_input(pdata->slots[0].sim_switch_pin);
+		if (ret) {
+			gpio_free(pdata->slots[0].sim_switch_pin);
+			return ret;
+		}
+	}
+	return 0;
+}
+#endif
+//&*&*&*SJ2_20110607, Add SIM card detection.
 static void omap_hsmmc_gpio_free(struct omap_mmc_platform_data *pdata)
 {
 	if (gpio_is_valid(pdata->slots[0].gpio_wp))
@@ -1857,6 +1963,42 @@ static void omap_hsmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	mmc_release_host(host->mmc);
 }
 
+#ifdef CONFIG_TIWLAN_SDIO
+/* <-- LH_SWRD_CL1_Henry@2011.8.21 manual mmc_pm_notify in early_suspend stage for adaptor plug-in  */	
+#ifdef CONFIG_WIRELESS_EARLYSUSPEND
+extern int dhd_fxn_rfkill_resume(void);
+#endif
+static void omap_hsmmc_status_notify_cb(int card_present, void *dev_id)
+{
+       struct omap_hsmmc_host *host = dev_id;
+       struct omap_mmc_slot_data *slot = &mmc_slot(host);
+       int carddetect;
+
+       printk(KERN_DEBUG "%s: card_present %d\n", mmc_hostname(host->mmc),
+		card_present);
+/* <-- LH_SWRD_CL1_Henry@2011.8.21 manual mmc_pm_notify in early_suspend stage for adaptor plug-in  */	
+#ifdef CONFIG_WIRELESS_EARLYSUSPEND
+	if ( strcmp(mmc_hostname(host->mmc), "mmc2") == 0)
+		dhd_fxn_rfkill_resume();
+#endif
+
+       carddetect = slot->card_detect(host->dev, host->slot_id);
+
+         sysfs_notify(&host->mmc->class_dev.kobj, NULL, "cover_switch");
+             
+	if (carddetect)
+        {
+           	mmc_detect_change(host->mmc, (HZ * 200) / 1000);
+        }
+	else
+	{
+			
+		mmc_detect_change(host->mmc, (HZ * 50) / 1000);
+	}
+}
+#endif
+
+
 static int omap_hsmmc_get_cd(struct mmc_host *mmc)
 {
 	struct omap_hsmmc_host *host = mmc_priv(mmc);
@@ -2301,6 +2443,21 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 	if (mmc_slot(host).features & HSMMC_HAS_48MHZ_MASTER_CLK)
 		host->master_clock = OMAP_MMC_MASTER_CLOCK / 2;
 
+#ifdef CONFIG_TIWLAN_SDIO
+	if (pdev->id == CONFIG_TIWLAN_MMC_CONTROLLER-1) {
+		if (pdata->slots[0].embedded_sdio != NULL) {
+                 //       pr_info("%s: ravi-omap_hsmmc_probe-6\n", __func__);
+			mmc_set_embedded_sdio_data(mmc,
+			&pdata->slots[0].embedded_sdio->cis,
+			&pdata->slots[0].embedded_sdio->cccr,
+			pdata->slots[0].embedded_sdio->funcs,
+			//pdata->slots[0].embedded_sdio->quirks); 
+            pdata->slots[0].embedded_sdio->num_funcs); 
+		}
+	}
+#endif
+//11
+       
 	platform_set_drvdata(pdev, host);
 	INIT_WORK(&host->mmc_carddetect_work, omap_hsmmc_detect);
 
@@ -2387,7 +2544,12 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 	 * as we want. */
 	mmc->max_segs = 1024;
 
+/*<-- LH_SWRD_CL1_Henry@2012.3.26 For data transfer speed -->*/	
+#if 0
 	mmc->max_blk_size = 512;       /* Block Length at max can be 1024 */
+#else
+	mmc->max_blk_size = 1024;       /* Block Length at max can be 1024 */
+#endif
 	mmc->max_blk_count = 0xFFFF;    /* No. of Blocks is 16 bits */
 	mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
 	mmc->max_seg_size = mmc->max_req_size;
@@ -2467,6 +2629,17 @@ static int __init omap_hsmmc_probe(struct platform_device *pdev)
 	if (mmc_slot(host).mmc_data.status)
 		mmc_slot(host).mmc_data.card_present =
 			mmc_slot(host).mmc_data.status(mmc_dev(host->mmc));
+ #ifdef CONFIG_TIWLAN_SDIO
+    	else if (mmc_slot(host).register_status_notify) {
+             
+		if (pdev->id == CONFIG_TIWLAN_MMC_CONTROLLER-1) {
+                  
+			mmc_slot(host).register_status_notify(omap_hsmmc_status_notify_cb, host);
+			//mmc->ocr_avail = 0x003fff80;
+		}
+	}
+#endif 
+	printk("%s, slot_id = %d caps=0x%lx pm_caps=%d detect_irq=%d\n", mmc_hostname(host->mmc), host->id, mmc->caps, mmc->pm_caps, mmc_slot(host).card_detect_irq);
 
 	omap_hsmmc_disable_irq(host);
 

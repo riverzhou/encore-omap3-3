@@ -233,6 +233,18 @@ config MMC_OMAP_HS
 
 	  If unsure, say N.
 
+#&*&*&*SJ1_20110422, Change mmcblk index number.
+config CHANGE_INAND_MMC_SCAN_INDEX
+  			bool "Change MMC1 scan index"
+	default n
+#&*&*&*SJ2_20110422, Change mmcblk index number.
+
+#&*&*&*SJ1_20110607, Add SIM card detection.
+config SIM_CARD_DETECTION
+	bool "SIM Card Detection"
+	default n
+#&*&*&*SJ2_20110607, Add SIM card detection.
+							
 config MMC_WBSD
 	tristate "Winbond W83L51xD SD/MMC Card Interface support"
 	depends on ISA_DMA_API
@@ -579,3 +591,10 @@ config MMC_USHC
 
 	  Note: These controllers only support SDIO cards and do not
 	  support MMC or SD memory cards.
+
+#&*&*&*HC1_20110727, Add SD wakeup feature
+config SD_CARD_WAKEUP
+  	bool "SD card wakeup"
+	default y
+#&*&*&*HC2_20110727, Add SD wakeup feature
+

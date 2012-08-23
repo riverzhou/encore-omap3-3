@@ -122,9 +122,11 @@ typedef struct _SYS_SPECIFIC_DATA_TAG_
 	struct clk	*psGPT11_FCK;
 	struct clk	*psGPT11_ICK;
 #endif
+
 #if defined(PVR_OMAP_USE_DM_TIMER_API)
 	struct omap_dm_timer *psGPTimer;
 #endif
+
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,22))
 	struct constraint_handle *pVdd2Handle;
 #endif
