@@ -608,7 +608,7 @@ static int fsg_setup(struct usb_function *f,
 	struct fsg_dev		*fsg = fsg_from_func(f);
 	struct usb_request	*req = fsg->common->ep0req;
 	u16			w_index = le16_to_cpu(ctrl->wIndex);
-	u16			w_value = le16_to_cpu(ctrl->wValue);
+	//u16			w_value = le16_to_cpu(ctrl->wValue);
 	u16			w_length = le16_to_cpu(ctrl->wLength);
 
 	if (!fsg_is_set(fsg->common))
@@ -625,9 +625,10 @@ static int fsg_setup(struct usb_function *f,
 		if (ctrl->bRequestType !=
 		    (USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 			break;
+#if 0 //&*&*&*SJ_20110527, fix cannot support two usb_mass_storage device.
 		if (w_index != fsg->interface_number || w_value != 0)
 			return -EDOM;
-
+#endif
 		/*
 		 * Raise an exception to stop the current operation
 		 * and reinitialize our state.
@@ -640,9 +641,11 @@ static int fsg_setup(struct usb_function *f,
 		if (ctrl->bRequestType !=
 		    (USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE))
 			break;
+#if 0 //&*&*&*SJ_20110527, fix cannot support two usb_mass_storage device.
 		if (w_index != fsg->interface_number || w_value != 0)
 			return -EDOM;
 		VDBG(fsg, "get max LUN\n");
+#endif
 		*(u8 *)req->buf = fsg->common->nluns - 1;
 
 		/* Respond with data/status */
@@ -1217,7 +1220,21 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[5] = 0;		/* No special options */
 	buf[6] = 0;
 	buf[7] = 0;
+/*<--LH_SWRD_CL1_andy@20110702 change usb vid and pid>*/
+#if defined (CONFIG_USB_VENDOR_ID_LENOVO)
+	if (common->lun == 0) {
+		memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
+	} else {
+	#if defined (CONFIG_USB_PRODUCT_ID_A1_07)
+		sprintf(buf + 8, "%-8s%-8s%04x", "Lenovo", "A1-07", "1");
+	#endif
+	}
+//	printk("common->nluns=%d,common->lun=%d\n", common->nluns, common->lun);
+#else
+//orig
 	memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
+#endif	
+/*<--LH_SWRD_CL1_andy@20110702 change usb vid and pid>*/
 	return 36;
 }
 
@@ -2959,12 +2976,13 @@ static void fsg_common_release(struct kref *ref)
 
 
 /*-------------------------------------------------------------------------*/
-
+unsigned int mass_storage_flag=0;		//Henry Li@gavin 20120410
 static void fsg_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct fsg_dev		*fsg = fsg_from_func(f);
 	struct fsg_common	*common = fsg->common;
-
+/* <-- LH_SWRD_CL1_Henry@2012.4.10 improve USB connection stability (not break down frequently) -->*/
+	mass_storage_flag=0;
 	DBG(fsg, "unbind\n");
 	if (fsg->common->fsg == fsg) {
 		fsg->common->new_fsg = NULL;
@@ -3025,7 +3043,8 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 			return -ENOMEM;
 		}
 	}
-
+/* <-- LH_SWRD_CL1_Henry@2012.4.10 improve USB connection stability (not break down frequently) -->*/
+	mass_storage_flag=1;
 	return 0;
 
 autoconf_fail:

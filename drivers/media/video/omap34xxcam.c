@@ -251,7 +251,7 @@ static void omap34xxcam_vbq_release(struct videobuf_queue *vbq,
 	if (!vbq->streaming) {
 		isp_vbq_release(isp, vbq, vb);
 		omap34xxcam_vb_lock_vma(vb, 0);
-		videobuf_dma_unmap(vbq, videobuf_to_dma(vb));
+		videobuf_dma_unmap(vbq->dev, videobuf_to_dma(vb));
 		videobuf_dma_free(videobuf_to_dma(vb));
 		vb->state = VIDEOBUF_NEEDS_INIT;
 	}
@@ -525,11 +525,11 @@ static int try_pix_parm(struct omap34xxcam_videodev *vdev,
 			 * Don't use modes that are farther from wanted size
 			 * that what we already got.
 			 */
-			if (SIZE_DIFF(&pix_tmp_out, wanted_pix_out)
+			if (SIZE_DIFF(&pix_tmp_in, wanted_pix_out)
 			    > SIZE_DIFF(&best_pix_out, wanted_pix_out)) {
 				dev_dbg(&vdev->vfd->dev, "size diff bigger: "
 					"w %d\th %d\tw %d\th %d\n",
-					pix_tmp_out.width, pix_tmp_out.height,
+					pix_tmp_in.width, pix_tmp_in.height,
 					best_pix_out.width,
 					best_pix_out.height);
 				continue;
@@ -539,13 +539,13 @@ static int try_pix_parm(struct omap34xxcam_videodev *vdev,
 			 * There's an input mode that can provide output
 			 * closer to wanted.
 			 */
-			if (SIZE_DIFF(&pix_tmp_out, wanted_pix_out)
+			if (SIZE_DIFF(&pix_tmp_in, wanted_pix_out)
 			    < SIZE_DIFF(&best_pix_out, wanted_pix_out)) {
 				/* Force renegotation of fps etc. */
 				best_ival->denominator = 0;
 				dev_dbg(&vdev->vfd->dev, "renegotiate: "
 					"w %d\th %d\tw %d\th %d\n",
-					pix_tmp_out.width, pix_tmp_out.height,
+					pix_tmp_in.width, pix_tmp_in.height,
 					best_pix_out.width,
 					best_pix_out.height);
 			}
@@ -1591,8 +1591,7 @@ int vidioc_unsubscribe_event(struct v4l2_fh *vfh,
  * feedback. The request is then passed on to the ISP private IOCTL handler,
  * isp_handle_private()
  */
-static long vidioc_default(struct file *file, void *_fh,
-			   bool valid_prio, int cmd, void *arg)
+static long vidioc_default(struct file *file, void *_fh, bool valid_prio, int cmd, void *arg)
 {
 	struct v4l2_fh *vfh = file->private_data;
 	struct omap34xxcam_fh *ofh = to_omap34xxcam_fh(vfh);
@@ -1921,7 +1920,6 @@ static int omap34xxcam_release(struct file *file)
 	struct omap34xxcam_videodev *vdev = ofh->vdev;
 	struct device *isp = vdev->cam->isp;
 	int i;
-	struct videobuf_queue *q = &ofh->vbq;
 
 	mutex_lock(&vdev->mutex);
 	if (vdev->cam->streaming == file) {
@@ -1938,9 +1936,6 @@ static int omap34xxcam_release(struct file *file)
 					    OMAP34XXCAM_SLAVE_POWER_ALL);
 		isp_put();
 	}
-
-	videobuf_mmap_free(q);
-
 	mutex_unlock(&vdev->mutex);
 
 	file->private_data = NULL;

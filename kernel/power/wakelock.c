@@ -40,6 +40,14 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define WAKE_LOCK_AUTO_EXPIRE            (1U << 10)
 #define WAKE_LOCK_PREVENTING_SUSPEND     (1U << 11)
 
+
+//&*&*&*HC1_20110427, Add to control wakeup source
+#include <plat/wakeup-source.h>
+extern void SendPowerbuttonEvent( void );
+int g_wakeup_reason = 0;
+//&*&*&*HC2_20110427, Add to control wakeup source
+
+
 static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
 static struct list_head active_wake_locks[WAKE_LOCK_TYPE_COUNT];
@@ -248,13 +256,40 @@ static long has_wake_lock_locked(int type)
 	}
 	return max_timeout;
 }
+/* <-- LH_SWRD_CL1_Henry@2011.7.18 get wake lock at "type" except alarm and alarm_rtc */
+static long has_wake_lock_locked_except_alarm(int type)
+{
+	struct wake_lock *lock, *n;
+	long max_timeout = 0;
 
+	BUG_ON(type >= WAKE_LOCK_TYPE_COUNT);
+	list_for_each_entry_safe(lock, n, &active_wake_locks[type], link) {
+		if (lock->flags & WAKE_LOCK_AUTO_EXPIRE) {
+			if ((lock->name == "alarm") || (lock->name == "alarm_rtc"))
+				{
+				printk("%s lock->name=%s\n", __FUNCTION__, lock->name);
+				continue;
+				}
+			long timeout = lock->expires - jiffies;
+			if (timeout <= 0)
+				expire_wake_lock(lock);
+			else if (timeout > max_timeout)
+				max_timeout = timeout;
+		} else
+			return -1;
+	}
+	return max_timeout;
+}
+/*  LH_SWRD_CL1_Henry@2011.7.18 get wake lock at "type" except alarm and alarm_rtc -->*/
 long has_wake_lock(int type)
 {
 	long ret;
 	unsigned long irqflags;
 	spin_lock_irqsave(&list_lock, irqflags);
-	ret = has_wake_lock_locked(type);
+/* <-- LH_SWRD_CL1_Henry@2011.7.18 make sure device can enter sleep mode after rtc alarm  */	
+	//ret = has_wake_lock_locked(type);
+	ret=has_wake_lock_locked_except_alarm(type);
+/*  LH_SWRD_CL1_Henry@2011.7.18 make sure device can enter sleep mode after rtc alarm -->*/
 	if (ret && (debug_mask & DEBUG_WAKEUP) && type == WAKE_LOCK_SUSPEND)
 		print_active_locks(type);
 	spin_unlock_irqrestore(&list_lock, irqflags);
@@ -272,6 +307,7 @@ static void suspend(struct work_struct *work)
 {
 	int ret;
 	int entry_event_num;
+	int send_event = 0;
 	struct timespec ts_entry, ts_exit;
 
 	if (has_wake_lock(WAKE_LOCK_SUSPEND)) {
@@ -295,6 +331,60 @@ static void suspend(struct work_struct *work)
 			"(%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n", ret,
 			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 			tm.tm_hour, tm.tm_min, tm.tm_sec, ts_exit.tv_nsec);
+		//&*&*&*HC1_20110427, Add to control wakeup source
+				printk("%s, g_twl4030_pih_isr=0x%x\n", __FUNCTION__, g_twl4030_pih_isr);
+				printk("%s, g_twl4030_sih_isr=0x%x\n", __FUNCTION__, g_twl4030_sih_isr);
+				printk("%s, g_core_wkst=0x%x\n", __FUNCTION__, g_core_wkst);
+				printk("%s, g_core_wkst3=0x%x\n", __FUNCTION__, g_core_wkst3);
+				printk("%s, g_wkup_wkst=0x%x\n", __FUNCTION__, g_wkup_wkst);
+				printk("%s, g_per_wkst=0x%x\n", __FUNCTION__, g_per_wkst);		
+				printk("%s, g_usbhost_wkst=0x%x\n", __FUNCTION__, g_usbhost_wkst);	
+		
+				g_wakeup_reason = omap3_get_wakeup_reason();
+				printk("%s, omap3_get_wakeup_reason=%d\n", __FUNCTION__, g_wakeup_reason);	
+		
+		//&*&*&*HC1_20110718, Add SD In/Out wakeup
+		//&*&*&*BC1_110526:fix rtc wakeup issue that the device will trun on the screen
+				if ((g_wakeup_reason == WKUP_BATT_LOW)/* || (g_wakeup_reason == WKUP_SD)*/ ) //|| (g_wakeup_reason ==WKUP_RTC)
+				{
+					//SendPowerbuttonEvent();
+					send_event = 1;
+				}
+		//&*&*&*BC2_110526:fix rtc wakeup issue that the device will trun on the screen 	
+		
+				if ((requested_suspend_state != PM_SUSPEND_ON) && (g_wakeup_reason == WKUP_SD))
+					send_event = 1; 	
+		
+		//&*&*&*HC1_20110518, modify cable-in wakeup behavior
+				if ((requested_suspend_state != PM_SUSPEND_ON) && (g_wakeup_reason == WKUP_CABLE))
+					send_event = 1;//SendPowerbuttonEvent();	
+					
+		//&*&*&*HC1_20110803, Modify for early suspend blocking issue
+#if defined (CONFIG_SD_CARD_WAKEUP) 
+				// fast insert/remove card can reach this case
+				if ((requested_suspend_state != PM_SUSPEND_ON) && (g_twl4030_pih_isr == 0x1)&& (g_twl4030_sih_isr == 0x1))
+					send_event = 1; 
+#endif		
+		//&*&*&*HC2_20110803, Modify for early suspend blocking issue
+		//&*&*&*HC2_20110518, modify cable-in wakeup behavior
+				if (send_event)
+					SendPowerbuttonEvent(); 		
+		//&*&*&*HC2_20110718, Add SD In/Out wakeup
+		
+				// clear
+				g_twl4030_pih_isr = 0;
+				g_twl4030_sih_isr = 0;
+				g_core_wkst = 0;
+				g_core_wkst3 = 0;
+				g_wkup_wkst = 0;
+				g_per_wkst = 0; 	
+				g_usbhost_wkst = 0; 		
+		//&*&*&*HC2_20110427, Add to control wakeup source		
+		//&*&*&*BC1_110513:add the wifi suspend wakelock to avoid wifi or system crash
+				if(ret != 0)
+				wake_lock_timeout(&unknown_wakeup, 2*HZ);	
+		//&*&*&*BC2_110513:add the wifi suspend wakelock to avoid wifi or system crash
+
 	}
 
 	if (ts_exit.tv_sec - ts_entry.tv_sec <= 1) {

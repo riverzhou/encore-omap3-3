@@ -229,7 +229,7 @@ static inline void omap_init_camera(void)
 	if (cpu_is_omap24xx())
 		platform_device_register(&omap2cam_device);
 #endif
-	platform_device_register(&omap3isp_device);
+	platform_device_register(&omap3isp_device); 
 }
 
 struct omap_device_pm_latency omap_keyboard_latency[] = {
@@ -557,10 +557,12 @@ static int omap_mcspi_init(struct omap_hwmod *oh, void *unused)
 	}
 
 	pdata->num_cs = mcspi_attrib->num_chipselect;
+	
+	
 	pdata->force_cs_mode = mcspi_attrib->force_cs_mode;
-	pdata->mode = mcspi_attrib->mode;
 	pdata->dma_mode = mcspi_attrib->dma_mode;
 	pdata->fifo_depth = mcspi_attrib->fifo_depth;
+	
 	switch (oh->class->rev) {
 	case OMAP2_MCSPI_REV:
 	case OMAP3_MCSPI_REV:

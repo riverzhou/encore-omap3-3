@@ -2105,7 +2105,8 @@ int isp_csi2_reset(struct isp_csi2_device *isp_csi2)
 	isp_csi2_complexio_power_autoswitch(isp_csi2, true);
 
 	isp_csi2_timings_config_forcerxmode(isp_csi2, 1, true);
-	isp_csi2_timings_config_stopstate_cnt(isp_csi2, 1, 0x1FF);
+//	isp_csi2_timings_config_stopstate_cnt(isp_csi2, 1, 0x1FF);
+	isp_csi2_timings_config_stopstate_cnt(isp_csi2, 1, 0x01F);//&*&*&*JJ1
 	isp_csi2_timings_update_all(isp_csi2, true);
 
 	return 0;
@@ -2155,15 +2156,15 @@ int isp_csi2_try_pipeline(struct isp_csi2_device *isp_csi2,
 {
 	struct device *dev = to_device(isp_csi2);
 
-	/* Don't allow frame conversion if only CSI2 RX is in the pipe */
-	if (((pipe->in_pix.pixelformat != pipe->out_pix.pixelformat) ||
-	     (pipe->csia_in_w != pipe->out_pix.width) ||
-	     (pipe->csia_in_h != pipe->out_pix.height)) &&
-	    pipe->modules == OMAP_ISP_CSIARX) {
-		dev_err(dev, "csi2: Receiver alone can't convert/resize"
-			     " image.");
-		return -EINVAL;
-	}
+//	/* Don't allow frame conversion if only CSI2 RX is in the pipe */
+//	if (((pipe->in_pix.pixelformat != pipe->out_pix.pixelformat) ||
+//	     (pipe->csia_in_w != pipe->out_pix.width) ||
+//	     (pipe->csia_in_h != pipe->out_pix.height)) &&
+//	    pipe->modules == OMAP_ISP_CSIARX) {
+//		dev_err(dev, "csi2: Receiver alone can't convert/resize"
+//			     " image.");
+//		return -EINVAL;
+//	}
 
 	pipe->csia_out_w_img = pipe->csia_in_w;
 	pipe->csia_out_h = pipe->csia_in_h;

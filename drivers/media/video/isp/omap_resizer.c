@@ -44,8 +44,6 @@
 
 #define OMAP_RESIZER_NAME		"omap-resizer"
 
-static DECLARE_MUTEX(rsz_hardware_mutex);
-
 enum rsz_config {
 	STATE_NOTDEFINED,	/* Resizer driver not configured */
 	STATE_CONFIGURED	/* Resizer driver configured. */
@@ -213,7 +211,7 @@ int rsz_ioc_run_engine(struct rsz_fhdl *fhdl)
 
 	/* Unmap and free the memory allocated for buffers */
 	if (sq->bufs[fhdl->src_buff_index] != NULL) {
-		videobuf_dma_unmap(sq, videobuf_to_dma(
+		videobuf_dma_unmap(sq->dev, videobuf_to_dma(
 				   sq->bufs[fhdl->src_buff_index]));
 		videobuf_dma_free(videobuf_to_dma(
 				  sq->bufs[fhdl->src_buff_index]));
@@ -221,7 +219,7 @@ int rsz_ioc_run_engine(struct rsz_fhdl *fhdl)
 	}
 
 	if (dq->bufs[fhdl->dst_buff_index] != NULL) {
-		videobuf_dma_unmap(dq, videobuf_to_dma(
+		videobuf_dma_unmap(dq->dev, videobuf_to_dma(
 				   dq->bufs[fhdl->dst_buff_index]));
 		videobuf_dma_free(videobuf_to_dma(
 				  dq->bufs[fhdl->dst_buff_index]));
@@ -352,7 +350,7 @@ static void rsz_vbq_release(struct videobuf_queue *q,
 	}
 
 	if (vb->memory != V4L2_MEMORY_MMAP) {
-		videobuf_dma_unmap(q, videobuf_to_dma(vb));
+		videobuf_dma_unmap(q->dev, videobuf_to_dma(vb));
 		videobuf_dma_free(videobuf_to_dma(vb));
 	}
 
@@ -548,11 +546,6 @@ static int rsz_release(struct inode *inode, struct file *filp)
 	isp_stop(fhdl->isp);
 
 	isp_put();
-
-	if (&fhdl->src_vbq)
-		videobuf_mmap_free(&fhdl->src_vbq);
-	if (&fhdl->dst_vbq)
-		videobuf_mmap_free(&fhdl->dst_vbq);
 
 	kfree(fhdl);
 

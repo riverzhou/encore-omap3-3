@@ -6,6 +6,7 @@
 #define OMAP4_MCSPI_REV 2
 
 #define OMAP4_MCSPI_REG_OFFSET 0x100
+
 #define OMAP2_MCSPI_MASTER		0
 #define OMAP2_MCSPI_SLAVE		1
 
@@ -40,7 +41,6 @@ struct omap2_mcspi_platform_config {
 
 struct omap2_mcspi_dev_attr {
 	unsigned short num_chipselect;
-	unsigned short	mode;
 	unsigned short dma_mode;
 	unsigned short force_cs_mode;
 	unsigned short fifo_depth;

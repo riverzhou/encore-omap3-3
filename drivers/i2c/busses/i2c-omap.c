@@ -237,6 +237,10 @@ const static u8 omap4_reg_map[] = {
 	[OMAP_I2C_IRQENABLE_CLR] = 0x30,
 };
 
+struct delayed_work restart_work;	
+int i2c_reboot_flag=0;
+
+
 static inline void omap_i2c_write_reg(struct omap_i2c_dev *i2c_dev,
 				      int reg, u16 val)
 {
@@ -515,6 +519,22 @@ static int omap_i2c_bus_clear(struct omap_i2c_dev *dev)
 	return omap_i2c_wait_for_bb(dev);
 }
 
+/* <-- LH_SWRD_CL1_Henry@2011.8.15 add kernel restart function in case of i2c bus failure*/		
+int i2c1_fail_counter=0;
+int i2c2_fail_counter=0;
+extern void kernel_restart(char *cmd);
+extern void set_reboot_flag(int value);
+void error_kernel_restart(void)
+{
+	if (i2c_reboot_flag == 0)
+	{
+		i2c_reboot_flag = 1;
+		cancel_delayed_work(&restart_work);	
+		schedule_delayed_work(&restart_work, msecs_to_jiffies(1000));	// 1s = 1000 is OK
+    }			   
+}
+
+
 /*
  * Low level master read/write transaction.
  */
@@ -592,12 +612,32 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
 	 */
 	r = wait_for_completion_timeout(&dev->cmd_complete, OMAP_I2C_TIMEOUT);
 	dev->buf_len = 0;
+
+	/* <-- LH_SWRD_CL1_Henry@2011.8.15 add kernel restart function in case of i2c bus failure*/	
 	if (r == 0) {
 		dev_err(dev->dev, "controller timed out\n");
 		omap_i2c_reset(dev);
 		omap_i2c_init(dev);
+		if (strcmp(dev_name(dev->dev), "i2c_omap.1") == 0)
+			i2c1_fail_counter++;
+		if (strcmp(dev_name(dev->dev), "i2c_omap.2") == 0)
+			i2c2_fail_counter++;
+		if  ((i2c1_fail_counter > 0x20) || (i2c2_fail_counter > 0x20))
+		{
+			i2c1_fail_counter=0;
+			i2c2_fail_counter=0;
+			error_kernel_restart();
+		}
 		return -ETIMEDOUT;
 	}
+	else
+	{
+		if (strcmp(dev_name(dev->dev), "i2c_omap.1") == 0)
+			i2c1_fail_counter=0;
+		if (strcmp(dev_name(dev->dev), "i2c_omap.2") == 0)
+			i2c2_fail_counter=0;	
+	}
+ 	/* LH_SWRD_CL1_Henry@2011.8.15 add kernel restart function in case of i2c bus failure -->*/
 
 	if (likely(!dev->cmd_err))
 		return 0;
@@ -986,6 +1026,15 @@ static const struct i2c_algorithm omap_i2c_algo = {
 	.functionality	= omap_i2c_func,
 };
 
+/* <-- LH_SWRD_CL1_Henry@2011.8.15 add kernel restart function in case of i2c bus failure -->*/		
+static void kernel_restart_work(struct work_struct *data)
+{
+	printk("%s \n", __FUNCTION__);
+	set_reboot_flag(0x87654321);
+	kernel_restart(NULL);			
+}
+
+
 static int __devinit
 omap_i2c_probe(struct platform_device *pdev)
 {
@@ -1099,6 +1148,9 @@ omap_i2c_probe(struct platform_device *pdev)
 
 	/* reset ASAP, clearing any IRQs */
 	omap_i2c_init(dev);
+
+	/* <--LH_SWRD_CL1_Henry@2011.8.15 add kernel restart function in case of i2c bus failure -->*/				
+	INIT_DELAYED_WORK(&restart_work, kernel_restart_work);
 
 	/* Decide what interrupts are needed */
 	dev->iestate = (OMAP_I2C_IE_XRDY | OMAP_I2C_IE_RRDY |

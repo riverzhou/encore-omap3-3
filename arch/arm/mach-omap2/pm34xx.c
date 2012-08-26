@@ -54,6 +54,20 @@
 #include "sdrc.h"
 #include "control.h"
 
+//&*&*&*HC1_20110427, Add to control wakeup source
+#include <plat/wakeup-source.h>
+
+u32 g_core_wkst = 0;
+u32 g_core_wkst3 = 0;
+u32 g_wkup_wkst = 0;
+u32 g_per_wkst = 0;
+u32 g_usbhost_wkst = 0;
+u16 g_wkup_event_offset = 0;
+//&*&*&*HC2_20110427, Add to control wakeup source
+
+
+
+
 #ifdef CONFIG_SUSPEND
 static suspend_state_t suspend_state = PM_SUSPEND_ON;
 static inline bool is_suspending(void)
@@ -350,6 +364,119 @@ static void restore_table_entry(void)
 	set_cr(control_reg_value);
 }
 
+//&*&*&*Eason.MJ.Li_201120419, Add to control wakeup source
+
+/*
+ * Read wake-up configuration or get the wake-up event
+ * option:
+ * 		0. get WAKEUPENABLE setting
+ *		1. get WAKEUPEVENT setting
+ * return:
+ *		0. not found or option is 0
+ *		pad offset. if the WAKEUPEVENT is triggered
+ */
+u16 omap3_get_wakeup_event(u16 option)
+{
+	u16 i;
+	u16 data;
+
+	// loop and check all the CONTROL_PADCONF_X registers
+	// start : CONTROL_PADCONF_SDRC_D0 (offset: 0x0030)
+	// end :  CONTROL_PADCONF_ETK_D14 (offset: 0x05FA)
+	for (i=0x30; i<=0x5FA; i+=2)
+	{
+		// skip the gap 
+		if (i == 0x268)
+			i = 0x5A0;
+		
+		data = omap_ctrl_readw(i);
+
+		if (option)
+		{
+			if (data & OFFSET_CONTROL_PADCONF_WAKEUPEVENT)
+			{
+				printk("%s, offset=%x[%x], wake-up event occurred !\n", __FUNCTION__, i, data);
+				return i;
+			}
+		}	
+		else
+		{
+			if (data & OFFSET_CONTROL_PADCONF_WAKEUPENABLE)
+			{
+				printk("%s, offset=%x[%x], wake-up enable !\n", __FUNCTION__, i, data);
+				//return i;
+			}	
+		}
+	}	
+
+	return 0;
+}
+//&*&*&*Eason.MJ.Li_201120419 Add sim card wakeup detection
+/*
+ * Get wake-up reason after resuming
+ */
+int omap3_get_wakeup_reason(void)
+{
+	enum wkup_reason wakeup = WKUP_UNKNOWN;
+	u16 i, index;
+	
+	// IO pad wake-up
+	if (g_wkup_wkst&OMAP3430_ST_IO_MASK)
+	{
+		printk("%s, g_wkup_event_offset=0x%x\n", __FUNCTION__, g_wkup_event_offset);
+
+		if (g_wkup_event_offset == 0)
+			return wakeup;
+
+		for (i=0; ep10_wkup_source[i].pad_offset != 0; i++)
+		{
+			// find out the triggered pad
+			if (ep10_wkup_source[i].pad_offset == g_wkup_event_offset)
+				break;
+		}
+
+		index = i;
+
+		// triggered by PMIC
+		if (ep10_wkup_source[i].pad_offset == 0x01E0)
+		{
+			if (g_twl4030_pih_isr&TPS65921_PIH_ISR_POWER_MANAGEMENT)
+			{
+				if (g_twl4030_sih_isr&TPS65921_PWR_ISR_PWRON) {
+					wakeup = WKUP_PWR_KEY;
+				}
+				else if(g_twl4030_sih_isr&TPS65921_PWR_ISR_USB_PRES) {
+					wakeup = WKUP_CABLE;
+				}				
+				else if(g_twl4030_sih_isr&TPS65921_PWR_ISR_RTC_IT) {
+					wakeup = WKUP_RTC;
+				}	
+			}
+			else if (g_twl4030_pih_isr&TPS65921_PIH_ISR_KEYPAD) {
+				wakeup = WKUP_KEYPAD;	
+			}	
+			else if (g_twl4030_pih_isr&TPS65921_PIH_ISR_GPIO) {
+				if (g_twl4030_sih_isr&0x1)
+					wakeup = WKUP_SD;
+				else if (g_twl4030_sih_isr&0x2)
+					wakeup = WKUP_SIM_CARD;
+			}	
+
+			index = wakeup;
+			
+		}
+		else
+			wakeup = ep10_wkup_source[index].reason;
+			
+		printk("%s, wakeup reason is %s [%d]\n", __FUNCTION__, ep10_wkup_source[index].name, wakeup);
+
+
+	
+	}
+
+	return wakeup;
+}
+EXPORT_SYMBOL(omap3_get_wakeup_reason);
 void omap_sram_idle(bool suspend)
 {
 	/* Variable to tell what needs to be saved and restored
@@ -578,10 +705,23 @@ static int omap3_pm_suspend(void)
 {
 	struct power_state *pwrst;
 	int state, ret = 0;
+	u32 core_wken, core_wken3, wake_wken, per_wken, usb_wken;
 
 	if (wakeup_timer_seconds || wakeup_timer_milliseconds)
 		omap2_pm_wakeup_on_timer(wakeup_timer_seconds,
 					 wakeup_timer_milliseconds);
+					
+#ifdef CONFIG_LOW_BATTERY_HANDLE
+
+	i2c_iclk_reg = __raw_readw(OMAP2_L4_IO_ADDRESS(0x48004a10));
+		i2c_iclk_reg = i2c_iclk_reg & (~(0x7 << 15));
+		__raw_writew(i2c_iclk_reg,OMAP2_L4_IO_ADDRESS(0x48004a10));
+		
+		i2c_fclk_reg = __raw_readw(OMAP2_L4_IO_ADDRESS(0x48004a00));
+		i2c_fclk_reg = i2c_fclk_reg & (~(0x7 << 15));
+		__raw_writew(i2c_fclk_reg,OMAP2_L4_IO_ADDRESS(0x48004a00));
+		
+#endif					 
 
 	/* Read current next_pwrsts */
 	list_for_each_entry(pwrst, &pwrst_list, node)
@@ -596,8 +736,73 @@ static int omap3_pm_suspend(void)
 
 	omap3_intc_suspend();
 
-	omap_sram_idle(true);
+//&*&*&11Eason.MJ.Li_201120419, mask unnecessary wakeup source
 
+	// get wake_en setting
+	core_wken = omap2_prm_read_mod_reg(CORE_MOD, PM_WKEN);
+	core_wken3 = omap2_prm_read_mod_reg(CORE_MOD, OMAP3430ES2_PM_WKEN3);
+	wake_wken = omap2_prm_read_mod_reg(WKUP_MOD, PM_WKEN);
+	per_wken = omap2_prm_read_mod_reg(OMAP3430_PER_MOD, PM_WKEN);		
+	usb_wken = omap2_prm_read_mod_reg(OMAP3430ES2_USBHOST_MOD, PM_WKEN);	
+
+#if 0
+	printk("%s 1, CORE_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, core_wken);	
+	printk("%s 1, CORE_MOD.OMAP3430ES2_PM_WKEN3[0x%x]\n", __FUNCTION__, core_wken3);
+	printk("%s 1, WKUP_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, wake_wken);	
+	printk("%s 1, OMAP3430_PER_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, per_wken);
+	printk("%s 1, OMAP3430ES2_USBHOST_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, usb_wken);
+#endif
+
+	// mask some wakeup source
+	omap2_prm_write_mod_reg(0x0, CORE_MOD, PM_WKEN);
+	omap2_prm_write_mod_reg(0x0, CORE_MOD, OMAP3430ES2_PM_WKEN3);
+	omap2_prm_write_mod_reg(per_wken&~(0x801), OMAP3430_PER_MOD, PM_WKEN);	
+	omap2_prm_write_mod_reg(0x0, OMAP3430ES2_USBHOST_MOD, PM_WKEN);
+	
+#if 0
+	printk("%s 2, CORE_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, prm_read_mod_reg(CORE_MOD, PM_WKEN));
+	printk("%s 2, CORE_MOD.OMAP3430ES2_PM_WKEN3[0x%x]\n", __FUNCTION__, prm_read_mod_reg(CORE_MOD, OMAP3430ES2_PM_WKEN3));	
+	printk("%s 2, WKUP_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, prm_read_mod_reg(WKUP_MOD, PM_WKEN));
+	printk("%s 2, OMAP3430_PER_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, prm_read_mod_reg(OMAP3430_PER_MOD, PM_WKEN));	
+	printk("%s 2, OMAP3430ES2_USBHOST_MOD.PM_WKEN[0x%x]\n", __FUNCTION__, prm_read_mod_reg(OMAP3430ES2_USBHOST_MOD, PM_WKEN));	
+#endif
+
+//&*&*&Eason.MJ.Li_201120419, Add to control wakeup source
+
+
+		omap_sram_idle(true);
+
+
+	g_core_wkst = omap2_prm_read_mod_reg(CORE_MOD, PM_WKST);
+	g_core_wkst3 = omap2_prm_read_mod_reg(CORE_MOD, OMAP3430ES2_PM_WKST3);
+	g_wkup_wkst = omap2_prm_read_mod_reg(WKUP_MOD, PM_WKST);
+	g_per_wkst = omap2_prm_read_mod_reg(OMAP3430_PER_MOD, PM_WKST);
+	g_usbhost_wkst = omap2_prm_read_mod_reg(OMAP3430ES2_USBHOST_MOD, PM_WKST);
+
+#if 0
+	printk("%s, CORE_MOD.PM_WKST[0x%x]\n", __FUNCTION__, g_core_wkst);	
+	printk("%s, CORE_MOD.OMAP3430ES2_PM_WKST3[0x%x]\n", __FUNCTION__, g_core_wkst3);
+	printk("%s, WKUP_MOD.PM_WKST[0x%x]\n", __FUNCTION__, g_wkup_wkst);
+	printk("%s, OMAP3430_PER_MOD.PM_WKST[0x%x]\n", __FUNCTION__, g_per_wkst);
+	printk("%s, OMAP3430ES2_USBHOST_MOD.PM_WKST[0x%x]\n", __FUNCTION__, g_usbhost_wkst);
+#endif
+
+	g_wkup_event_offset = omap3_get_wakeup_event(1);
+//	printk("%s, g_wkup_event_offset=0x%x\n", __FUNCTION__, g_wkup_event_offset);
+//&*&*&Eason.MJ.Li_201120419, Add to control wakeup source
+
+	// restore wakeup source
+	omap2_prm_write_mod_reg(core_wken, CORE_MOD, PM_WKEN);
+	omap2_prm_write_mod_reg(core_wken3, CORE_MOD, OMAP3430ES2_PM_WKEN3);
+	omap2_prm_write_mod_reg(per_wken, OMAP3430_PER_MOD, PM_WKEN);	
+	omap2_prm_write_mod_reg(usb_wken, OMAP3430ES2_USBHOST_MOD, PM_WKEN);
+
+//&*&*&11Eason.MJ.Li_201120419, mask unnecessary wakeup source
+
+        //andy add for SD card wakeup judge to rtc wakeup 
+#ifndef CONFIG_LOW_BATTERY_HANDLE 
+        wakeup_stage=2;
+#endif
 restore:
 	/* Restore next_pwrsts */
 	list_for_each_entry(pwrst, &pwrst_list, node) {

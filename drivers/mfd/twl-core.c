@@ -243,6 +243,7 @@
 #define TPS_SUBSET		BIT(1)	/* tps659[23]0 have fewer LDOs */
 #define TWL5031			BIT(2)  /* twl5031 has different registers */
 #define TWL6030_CLASS		BIT(3)	/* TWL6030 class */
+#define TPS_65921       	BIT(4)  /* tps65921 w/o vmmc2 */
 
 /*----------------------------------------------------------------------*/
 
@@ -655,6 +656,30 @@ add_regulator(int num, struct regulator_init_data *pdata,
 	return add_regulator_linked(num, pdata, NULL, 0, features);
 }
 
+/* ICS LH_SWRD_CL1_Henry@2012.2.7 Add VDDS_DSI regulator */
+static struct regulator_consumer_supply henry_vpll2_supply[] = {
+	REGULATOR_SUPPLY("vdds_dsi", "omapdss"),
+	REGULATOR_SUPPLY("vdds_dsi", "omapdss_dsi1"),
+};
+static struct regulator_init_data henry_vpll2 = {
+	.constraints = {
+		.min_uV             = 1800000,
+		.max_uV             = 1800000,
+		.valid_modes_mask   = REGULATOR_MODE_NORMAL
+				      | REGULATOR_MODE_STANDBY,
+		.valid_ops_mask     = REGULATOR_CHANGE_MODE
+				      | REGULATOR_CHANGE_STATUS,
+	},
+/* ICS LH_SWRD_CL1_Henry@2012.2.7 Add VDDS_DSI regulator */
+/*		
+	.num_consumer_supplies  = 1,
+	.consumer_supplies      = &evt_vpll2_supply,
+*/	
+	.num_consumer_supplies		= ARRAY_SIZE(henry_vpll2_supply),
+	.consumer_supplies		= henry_vpll2_supply,	
+};
+
+
 /*
  * NOTE:  We know the first 8 IRQs after pdata->base_irq are
  * for the PIH, and the next are for the PWR_INT SIH, since
@@ -882,8 +907,12 @@ add_children(struct twl4030_platform_data *pdata, unsigned long features)
 
 	/* twl4030 regulators */
 	if (twl_has_regulator() && twl_class_is_4030()) {
+	/* Henry: using add_regulator_linked instead of add_regulator */
+		/*
 		child = add_regulator(TWL4030_REG_VPLL1, pdata->vpll1,
 					features);
+		*/
+		child = add_regulator_linked(TWL4030_REG_VPLL1, &henry_vpll2,  henry_vpll2_supply, 1, features);
 		if (IS_ERR(child))
 			return PTR_ERR(child);
 
@@ -1116,7 +1145,6 @@ add_children(struct twl4030_platform_data *pdata, unsigned long features)
 
 	}
 
-/* Removed (features & TWL6030_CLASS) condition check */
 	if (twl_has_bci() && pdata->bci &&
 			(!(features & (TPS_SUBSET | TWL5031)) ||
 					(features & TWL6030_CLASS))) {
@@ -1377,6 +1405,15 @@ twl_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 
 	status = add_children(pdata, id->driver_data);
+/*<-- LH_SWRD_CL1_Henry@2012.3.26 DCDC3 output 1.85V -->*/
+//#if defined(CONFIG_TWL4030_DCDC3_1V85)	
+     	twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &temp, 0x54);
+	    twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, temp|0x1, 0x54);
+		
+		twl_i2c_read_u8(TWL4030_MODULE_PM_RECEIVER, &temp, 0x54);
+		
+		printk("=============================%s=====================temp = 0x%x",__func__,temp);
+//#endif
 fail:
 	if (status < 0)
 		twl_remove(client);
@@ -1392,6 +1429,7 @@ static const struct i2c_device_id twl_ids[] = {
 	{ "tps65920", TPS_SUBSET },	/* fewer LDOs; no codec or charger */
 	{ "twl6030", TWL6030_CLASS },	/* "Phoenix power chip" */
 	{ "twl6025", TWL6030_CLASS | TWL6025_SUBCLASS }, /* "Phoenix lite" */
+	{ "tps65921", TPS_SUBSET | TPS_65921 }, /* w/o vmmc2 */
 	{ /* end of list */ },
 };
 MODULE_DEVICE_TABLE(i2c, twl_ids);

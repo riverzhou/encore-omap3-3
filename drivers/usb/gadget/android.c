@@ -64,8 +64,15 @@ MODULE_VERSION("1.0");
 static const char longname[] = "Gadget Android";
 
 /* Default vendor and product IDs, overridden by userspace */
+/* Henry Li: 20120210 */
+#if defined(CONFIG_USB_VENDOR_ID_LENOVO)
+#define VENDOR_ID	       0x17EF	//OMAP_VENDOR_ID
+#define PRODUCT_ID		0x7423	//OMAP_UMS_ADB_PRODUCT_ID
+	//0xD101	//OMAP_ADB_PRODUCT_ID		//PC will see "其它设备a107"
+#else
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
+#endif
 
 struct android_usb_function {
 	char *name;
@@ -642,7 +649,7 @@ static struct android_usb_function accessory_function = {
 	.ctrlrequest	= accessory_function_ctrlrequest,
 };
 
-
+#if 1	//Henry: 20120210 testing only
 static struct android_usb_function *supported_functions[] = {
 	&adb_function,
 	&acm_function,
@@ -653,6 +660,13 @@ static struct android_usb_function *supported_functions[] = {
 	&accessory_function,
 	NULL
 };
+#else
+static struct android_usb_function *supported_functions[] = {
+	&mass_storage_function,
+	&adb_function,
+	NULL
+};
+#endif
 
 
 static int android_init_functions(struct android_usb_function **functions,
@@ -989,9 +1003,16 @@ static int android_bind(struct usb_composite_dev *cdev)
 	device_desc.iProduct = id;
 
 	/* Default strings - should be updated by userspace */
+/* Henry Li: 20120210 */
+#if defined(CONFIG_USB_VENDOR_ID_LENOVO)
+	strncpy(manufacturer_string, "lenovo", sizeof(manufacturer_string) - 1);
+	strncpy(product_string, "a107", sizeof(product_string) - 1);
+	strncpy(serial_string, "7DF000029EDC0000", sizeof(serial_string) - 1);
+#else	
 	strncpy(manufacturer_string, "Android", sizeof(manufacturer_string) - 1);
 	strncpy(product_string, "Android", sizeof(product_string) - 1);
 	strncpy(serial_string, "0123456789ABCDEF", sizeof(serial_string) - 1);
+#endif
 
 	id = usb_string_id(cdev);
 	if (id < 0)

@@ -460,8 +460,11 @@ int twl6030_unregister_notifier(struct notifier_block *nb,
 #define TWL4030_PM_MASTER_MEMORY_ADDRESS	0x23
 #define TWL4030_PM_MASTER_MEMORY_DATA		0x24
 
-#define TWL4030_PM_MASTER_KEY_CFG1		0xc0
-#define TWL4030_PM_MASTER_KEY_CFG2		0x0c
+//#define TWL4030_PM_MASTER_KEY_CFG1		0xc0
+//#define TWL4030_PM_MASTER_KEY_CFG2		0x0c
+/*LH_SWRD_CL1_mike.ma 2012_05_02 CL1 change config to turn vdd1&vdd2 off when sleep-->*/
+#define TWL4030_PM_MASTER_KEY_CFG1		0xFC
+#define TWL4030_PM_MASTER_KEY_CFG2		0x96
 
 #define TWL4030_PM_MASTER_KEY_TST1		0xe0
 #define TWL4030_PM_MASTER_KEY_TST2		0x0e

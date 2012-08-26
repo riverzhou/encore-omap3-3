@@ -72,7 +72,6 @@
 #ifdef CONFIG_TIDSPBRIDGE_DVFS
 #include <plat/dsp.h>
 #endif
-
 /* Defines, Data Structures, Typedefs */
 #define OUTPUTNOTREADY  0xffff
 #define NOTENABLED      0xffff	/* Channel(s) not enabled */

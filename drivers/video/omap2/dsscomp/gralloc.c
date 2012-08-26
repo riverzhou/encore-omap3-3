@@ -19,11 +19,9 @@
 #include <linux/ion.h>
 #include <linux/omap_ion.h>
 #endif
-
 #ifdef CONFIG_OMAP3_ISP_RESIZER_ON_720P_VIDEO
 static u32 prev_buf_addr;
 #endif
-
 static bool blanked;
 
 #define NUM_TILER1D_SLOTS 2
@@ -236,7 +234,7 @@ int dsscomp_gralloc_queue(struct dsscomp_setup_dispc_data *d,
 		if (cpu_is_omap3630())
 			dev = cdev->mgrs[d->mgrs[i].ix]->device;
 		else
-			dev = cdev->displays[d->mgrs[i].ix];
+		dev = cdev->displays[d->mgrs[i].ix];
 		if (!dev) {
 			dev_warn(DEV(cdev), "failed to get display%d\n",
 								d->mgrs[i].ix);

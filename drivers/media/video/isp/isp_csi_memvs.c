@@ -696,8 +696,7 @@ static int vidioc_streamoff(struct file *file, void *fh, enum v4l2_buf_type i)
  * @arg: ioctl arg value
  *
  */
-static long vidioc_default(struct file *file, void *_fh,
-			   bool valid_prio, int cmd, void *arg)
+static long vidioc_default(struct file *file, void *_fh, bool valid_prio, int cmd, void *arg)
 {
 	struct isp_csi_memvs_sensor *sensor = video_drvdata(file);
 	struct v4l2_int_device *vdev = sensor->v4l2_int_device;
@@ -844,7 +843,7 @@ static void isp_csi_memvs_vout_buf_release(struct videobuf_queue *q,
 	ispmmu_vunmap(dev, bufs->isp_addr_capture[vb->i]);
 	bufs->isp_addr_capture[vb->i] = (dma_addr_t)NULL;
 	isp_csi_memvs_vout_vb_lock_vma(vb, 0);
-	videobuf_dma_unmap(q, videobuf_to_dma(vb));
+	videobuf_dma_unmap(q->dev, videobuf_to_dma(vb));
 	videobuf_dma_free(videobuf_to_dma(vb));
 	vb->state = VIDEOBUF_NEEDS_INIT;
 }
@@ -1007,9 +1006,6 @@ static int isp_csi_memvs_vout_release(struct file *file)
 		return -EINVAL;
 	}
 	mutex_unlock(&sensor->mutex);
-
-	if (&ofh->vbq)
-		videobuf_mmap_free(&ofh->vbq);
 
 	kfree(ofh);
 

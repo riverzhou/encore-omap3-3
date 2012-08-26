@@ -37,6 +37,11 @@
 #include "dss.h"
 #include "dss_features.h"
 
+#ifdef CONFIG_OMAP3_ISP_RESIZER_ON_720P_VIDEO
+#include "dss_ispresizer.h"
+static u32 prev_buf_addr;
+#endif
+
 static int num_managers;
 static struct list_head manager_list;
 static struct omap_overlay_manager *mgrs[MAX_DSS_MANAGERS];

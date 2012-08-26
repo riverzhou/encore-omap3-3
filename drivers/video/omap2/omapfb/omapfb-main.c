@@ -38,8 +38,26 @@
 
 #define MODULE_NAME     "omapfb"
 
+/*<--LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display*/
+//#include "lenovo_logo.h"
+//#include "lenovo_logo_rotated.h"
+#include "logo_lenovo_words.h"
+struct img_info{
+	int img_w;
+	int img_h;
+	int img_xoffset;
+	int img_yoffset;
+	int img_bytespp;
+};
+/*LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display-->*/
 #define OMAPFB_PLANE_XRES_MIN		8
 #define OMAPFB_PLANE_YRES_MIN		8
+#define LENOVO_XOFFSET 462
+#define LENOVO_YOFFSET 145 
+/*
+#define LENOVO_XOFFSET 354
+#define LENOVO_YOFFSET 131
+*/
 
 static char *def_mode;
 static char *def_vram;
@@ -1924,6 +1942,46 @@ static void omapfb_free_resources(struct omapfb2_device *fbdev)
 	kfree(fbdev);
 }
 
+/*<--LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display*/
+static void show_lenovo_logo(struct fb_info *fbi, int xoffset, int yoffset, int img_w, int img_h, int img_bytespp)
+{
+	int i, j;
+	int bytespp;
+	u32 __iomem *tmp;
+	int r,g,b;
+	
+	printk("#####the xoffset is %d, the yoffset is %d, the img_w is %d, the img_h is %d, the img_bytespp is %d...\n", xoffset, yoffset, img_w, img_h, img_bytespp);
+	//omapfb_set_par(fbi);
+	struct omapfb_info *ofbi = FB2OFB(fbi);
+	fbi->screen_base = (u32 __iomem *)omapfb_get_region_vaddr(ofbi); 
+	bytespp = (fbi->var).bits_per_pixel >> 3;
+	printk("#####the bytespp is %d ...\n", bytespp);
+	tmp = fbi->screen_base + yoffset * (fbi->var).xres * bytespp + xoffset * bytespp;
+
+	
+	memset(tmp, 0, img_w * img_h * bytespp);
+	
+   	for(i = 0; i < img_h; i++)
+		for(j = 0; j < img_w; j++)
+			{
+				
+				//tmp = 0x00000000;
+ 				b = gImage_logo_lenovo_words[img_w * img_bytespp * i+ img_bytespp * j] % 256;
+				g = gImage_logo_lenovo_words[img_w * img_bytespp * i +img_bytespp * j + 1] % 256;
+				r = gImage_logo_lenovo_words[img_w * img_bytespp * i+ img_bytespp * j + 2] % 256;
+			/* 
+				b = gImage_lenovo_logo_rotated[img_w * img_bytespp * i+ img_bytespp * j] % 256;
+				g = gImage_lenovo_logo_rotated[img_w * img_bytespp * i +img_bytespp * j + 1] % 256;
+				r = gImage_lenovo_logo_rotated[img_w * img_bytespp * i+ img_bytespp * j + 2] % 256;
+
+			*/	
+				*tmp = r << 16 | g << 8 | b;
+				tmp++;
+				if(j == (img_w - 1))
+					tmp += ((fbi->var).xres - img_w) ;
+			}  
+}
+/*LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display-->*/
 static int omapfb_create_framebuffers(struct omapfb2_device *fbdev)
 {
 	int r, i;
@@ -2043,6 +2101,28 @@ static int omapfb_create_framebuffers(struct omapfb2_device *fbdev)
 			}
 		}
 	}
+/*<--LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display*/
+	//show_logo(fbdev->fbs[0]);
+	struct img_info *CL1_img_info = kmalloc(sizeof(struct img_info) ,GFP_KERNEL);
+ 	CL1_img_info->img_w = 100;
+	CL1_img_info->img_h = 310;
+	CL1_img_info->img_xoffset = 462;
+	CL1_img_info->img_yoffset = 145;
+	CL1_img_info->img_bytespp = 3; 
+/*
+	CL1_img_info->img_w = 309;
+	CL1_img_info->img_h = 309;
+	CL1_img_info->img_xoffset = 354;
+	CL1_img_info->img_yoffset = 131;
+	CL1_img_info->img_bytespp = 3;
+*/
+	show_lenovo_logo(fbdev->fbs[0], 
+					 CL1_img_info->img_xoffset, 
+					 CL1_img_info->img_yoffset, 
+					 CL1_img_info->img_w,
+					 CL1_img_info->img_h,
+					 CL1_img_info->img_bytespp);
+/*LH_SWRD_CL1_James 2011_06_02 CL1 LCD logo display-->*/
 
 	DBG("create_framebuffers done\n");
 

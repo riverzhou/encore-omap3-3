@@ -373,6 +373,7 @@ static int mmc_sdio_init_card(struct mmc_host *host, u32 ocr,
 		goto err;
 	}
 
+#if 0
 	if ((ocr & R4_MEMORY_PRESENT) &&
 	    mmc_sd_get_cid(host, host->ocr & ocr, card->raw_cid, NULL) == 0) {
 		card->type = MMC_TYPE_SD_COMBO;
@@ -390,6 +391,12 @@ static int mmc_sdio_init_card(struct mmc_host *host, u32 ocr,
 			return -ENOENT;
 		}
 	}
+#endif
+#ifdef CONFIG_TIWLAN_SDIO
+	card->quirks = host->embedded_sdio_data.num_funcs ; 
+#endif
+	card->type = MMC_TYPE_SDIO;
+
 
 	/*
 	 * Call the optional HC's init_card function to handle quirks.
@@ -491,6 +498,10 @@ static int mmc_sdio_init_card(struct mmc_host *host, u32 ocr,
 			return -ENOENT;
 
 		card = oldcard;
+
+#ifdef CONFIG_TIWLAN_SDIO
+		return 0;
+#endif
 	}
 	mmc_fixup_device(card, NULL);
 
@@ -560,10 +571,25 @@ static void mmc_sdio_remove(struct mmc_host *host)
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
-	for (i = 0;i < host->card->sdio_funcs;i++) {
-		if (host->card->sdio_func[i]) {
-			sdio_remove_func(host->card->sdio_func[i]);
-			host->card->sdio_func[i] = NULL;
+	if(host->index == 2)
+	{
+	
+		for (i = host->card->sdio_funcs;i >= 0 ;i--) {
+			if (host->card->sdio_func[i]) {
+				sdio_remove_func(host->card->sdio_func[i]);
+				host->card->sdio_func[i] = NULL;
+			}
+		}
+
+	}
+	else
+	{
+
+		for (i = 0;i < host->card->sdio_funcs;i++) {
+			if (host->card->sdio_func[i]) {
+				sdio_remove_func(host->card->sdio_func[i]);
+				host->card->sdio_func[i] = NULL;
+			}
 		}
 	}
 

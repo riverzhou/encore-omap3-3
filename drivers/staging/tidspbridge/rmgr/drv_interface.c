@@ -151,6 +151,27 @@ static u32 time_out = 1000;
 #ifdef CONFIG_TIDSPBRIDGE_DVFS
 s32 dsp_max_opps = VDD1_OPP4;
 #endif
+
+/* Maximum Opps that can be requested by IVA */
+/*vdd1 rate table */
+//#ifdef CONFIG_TIDSPBRIDGE_DVFS
+#if 0
+
+const struct omap_opp vdd1_rate_table_bridge[] = {
+	{0, 0, 0},
+	/*OPP1 */
+	{S125M, VDD1_OPP1, 0},
+	/*OPP2 */
+	{S250M, VDD1_OPP2, 0},
+	/*OPP3 */
+	{S500M, VDD1_OPP3, 0},
+	/*OPP4 */
+	{S550M, VDD1_OPP4, 0},
+	/*OPP5 */
+	{S600M, VDD1_OPP5, 0},
+};
+#endif 
+
 #endif
 
 struct omap_dsp_platform_data *omap_dspbridge_pdata;
@@ -409,8 +430,6 @@ static int __devexit omap34_xx_bridge_remove(struct platform_device *pdev)
 		driver_context = 0;
 		DBC_ASSERT(ret == true);
 	}
-	kfree(drv_datap);
-	dev_set_drvdata(bridge, NULL);
 
 func_cont:
 	mem_ext_phys_pool_release();
@@ -502,42 +521,35 @@ static int bridge_open(struct inode *ip, struct file *filp)
 	}
 #endif
 	pr_ctxt = kzalloc(sizeof(struct process_context), GFP_KERNEL);
-	if (!pr_ctxt)
-		return -ENOMEM;
+	if (pr_ctxt) {
+		pr_ctxt->res_state = PROC_RES_ALLOCATED;
+		spin_lock_init(&pr_ctxt->dmm_map_lock);
+		INIT_LIST_HEAD(&pr_ctxt->dmm_map_list);
+		spin_lock_init(&pr_ctxt->dmm_rsv_lock);
+		INIT_LIST_HEAD(&pr_ctxt->dmm_rsv_list);
 
-	pr_ctxt->res_state = PROC_RES_ALLOCATED;
-	spin_lock_init(&pr_ctxt->dmm_map_lock);
-	INIT_LIST_HEAD(&pr_ctxt->dmm_map_list);
-	spin_lock_init(&pr_ctxt->dmm_rsv_lock);
-	INIT_LIST_HEAD(&pr_ctxt->dmm_rsv_list);
+		pr_ctxt->node_id = kzalloc(sizeof(struct idr), GFP_KERNEL);
+		if (pr_ctxt->node_id) {
+			idr_init(pr_ctxt->node_id);
+		} else {
+			status = -ENOMEM;
+			goto err;
+		}
 
-	pr_ctxt->node_id = kzalloc(sizeof(struct idr), GFP_KERNEL);
-	if (!pr_ctxt->node_id) {
+		pr_ctxt->stream_id = kzalloc(sizeof(struct idr), GFP_KERNEL);
+		if (pr_ctxt->stream_id)
+			idr_init(pr_ctxt->stream_id);
+		else
+			status = -ENOMEM;
+	} else {
 		status = -ENOMEM;
-		goto err1;
 	}
-
-	idr_init(pr_ctxt->node_id);
-
-	pr_ctxt->stream_id = kzalloc(sizeof(struct idr), GFP_KERNEL);
-	if (!pr_ctxt->stream_id) {
-		status = -ENOMEM;
-		goto err2;
-	}
-
-	idr_init(pr_ctxt->stream_id);
-
+err:
 	filp->private_data = pr_ctxt;
-
-	#ifdef CONFIG_TIDSPBRIDGE_RECOVERY
+#ifdef CONFIG_TIDSPBRIDGE_RECOVERY
+	if (!status)
 		atomic_inc(&bridge_cref);
-	#endif
-	return 0;
-
-err2:
-	kfree(pr_ctxt->node_id);
-err1:
-	kfree(pr_ctxt);
+#endif
 	return status;
 }
 
@@ -559,8 +571,6 @@ static int bridge_release(struct inode *ip, struct file *filp)
 	flush_signals(current);
 	drv_remove_all_resources(pr_ctxt);
 	proc_detach(pr_ctxt);
-	kfree(pr_ctxt->node_id);
-	kfree(pr_ctxt->stream_id);
 	kfree(pr_ctxt);
 
 	filp->private_data = NULL;

@@ -247,6 +247,12 @@ static int __init omap3_l3_probe(struct platform_device *pdev)
 		goto err1;
 	}
 
+	 
+	omap3_l3_writell(l3->rt, L3_RT_NETWORK_CONTROL, 0x0);
+	omap3_l3_writell(l3->rt + L3_DSS_IA_CONTROL, L3_AGENT_CONTROL, 0x1);
+	omap3_l3_writell(l3->rt + L3_DSS_IA_CONTROL, L3_AGENT_CONTROL, 0x0);
+
+
 	l3->app_irq = platform_get_irq(pdev, 1);
 	ret = request_irq(l3->app_irq, omap3_l3_app_irq,
 		IRQF_DISABLED | IRQF_TRIGGER_RISING,
