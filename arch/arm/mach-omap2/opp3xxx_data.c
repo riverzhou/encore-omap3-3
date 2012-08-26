@@ -149,8 +149,9 @@ static struct omap_opp_def __initdata omap34xx_opp_def_list[] = {
 };
 
 static struct omap_opp_def __initdata omap36xx_opp_def_list[] = {
+/* <-- LH_SWRD_CL1_Henry@2011.11.15  Test version on system reliability */
 	/* MPU OPP1 - OPP50 */
-	OPP_INITIALIZER("mpu", "dpll1_ck", "mpu_iva", true,  300000000, OMAP3630_VDD_MPU_OPP50_UV),
+	//OPP_INITIALIZER("mpu", "dpll1_ck", "mpu_iva", true,  300000000, OMAP3630_VDD_MPU_OPP50_UV),
 	/* MPU OPP2 - OPP100 */
 	OPP_INITIALIZER("mpu", "dpll1_ck", "mpu_iva", true,  600000000, OMAP3630_VDD_MPU_OPP100_UV),
 	/* MPU OPP3 - OPP-Turbo */
@@ -170,8 +171,9 @@ static struct omap_opp_def __initdata omap36xx_opp_def_list[] = {
 	OPP_INITIALIZER("l3_main", "l3_ick", "core", true,
 				200000000, OMAP3630_VDD_CORE_OPP100_UV),
 
+/* <-- LH_SWRD_CL1_Henry@2011.11.15  Test version on system reliability */
 	/* DSP OPP1 - OPP50 */
-	OPP_INITIALIZER("iva", "dpll2_ck", "mpu_iva", true,  260000000, OMAP3630_VDD_MPU_OPP50_UV),
+	//OPP_INITIALIZER("iva", "dpll2_ck", "mpu_iva", true,  260000000, OMAP3630_VDD_MPU_OPP50_UV),
 	/* DSP OPP2 - OPP100 */
 	OPP_INITIALIZER("iva", "dpll2_ck", "mpu_iva", true,  520000000, OMAP3630_VDD_MPU_OPP100_UV),
 	/* DSP OPP3 - OPP-Turbo */

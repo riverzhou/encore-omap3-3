@@ -1590,6 +1590,42 @@ int mmc_set_blocklen(struct mmc_card *card, unsigned int blocklen)
 }
 EXPORT_SYMBOL(mmc_set_blocklen);
 
+//&*&*&*SJ1_20110607, Add SIM card detection.
+#if defined (CONFIG_SIM_CARD_DETECTION) && defined (CONFIG_CHANGE_INAND_MMC_SCAN_INDEX)
+#include <linux/mmc/card_socket.h>
+
+void sim_card_detect_change(struct mmc_host *host, unsigned long delay)
+{
+	unsigned long flags;
+
+	if (the_sim_detect == NULL)
+		return;
+		
+	spin_lock_irqsave(&host->lock, flags);
+
+	schedule_delayed_work(&the_sim_detect->sim_detect_delayed_work, delay);
+
+	spin_unlock_irqrestore(&host->lock, flags);
+}
+
+EXPORT_SYMBOL(sim_card_detect_change);
+
+void update_sim_card_status(struct work_struct *work)
+{
+	printk("%s\n", __FUNCTION__);
+
+	if (the_sim_detect == NULL)
+		return;
+	
+	switch_set_state(&the_sim_detect->sdev, g_sim_carddetect_status);
+	printk("%s\n", g_sim_carddetect_status ? "closed" : "open");
+}
+#endif /* End (CONFIG_SIM_CARD_DETECTION) */
+//&*&*&*SJ2_20110607, Add SIM card detection.
+
+//&*&*&*SJ1_20110721, polling mmc1 card remove.
+extern int g_mmc1_poll_cnt;
+//&*&*&*SJ2_20110721, polling mmc1 card remove.
 static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 {
 	host->f_init = freq;
@@ -1639,8 +1675,17 @@ void mmc_rescan(struct work_struct *work)
 	 * if there is a _removable_ card registered, check whether it is
 	 * still present
 	 */
+	/* Henry: 20120210 */
+	/*
 	if (host->bus_ops && host->bus_ops->detect && !host->bus_dead
-	    && !(host->caps & MMC_CAP_NONREMOVABLE))
+	    && !(host->caps & MMC_CAP_NONREMOVABLE))*/
+
+#ifdef CONFIG_TIWLAN_SDIO
+	if ((host->bus_ops != NULL) && host->bus_ops->detect && !host->bus_dead)
+#else
+	if ((host->bus_ops != NULL) && host->bus_ops->detect && !host->bus_dead
+					&& mmc_card_is_removable(host))
+#endif
 		host->bus_ops->detect(host);
 
 	/* If the card was removed the bus will be marked

@@ -944,11 +944,17 @@ PHONY += $(vmlinux-dirs)
 $(vmlinux-dirs): prepare scripts
 	$(Q)$(MAKE) $(build)=$@
 
+__svnversion = $(shell $(CONFIG_SHELL) \
+                         $(srctree)/scripts/svnversion $(srctree))
+export __svnversion
 # Store (new) KERNELRELASE string in include/config/kernel.release
 include/config/kernel.release: include/config/auto.conf FORCE
 	$(Q)rm -f $@
 	$(Q)echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree))" > $@
 
+include/config/cl1.release: include/config/auto.conf FORCE
+	$(Q)rm -f $@
+	$(Q)echo "svnversion" > $@
 
 # Things we need to do before we recursively start building the kernel
 # or the modules are listed in "prepare".
@@ -976,7 +982,8 @@ endif
 prepare2: prepare3 outputmakefile asm-generic
 
 prepare1: prepare2 include/linux/version.h include/generated/utsrelease.h \
-                   include/config/auto.conf
+                   include/config/auto.conf                               \
+		   include/linux/svnversion.h
 	$(cmd_crmodverdir)
 
 archprepare: prepare1 scripts_basic
@@ -1009,12 +1016,17 @@ define filechk_version.h
 	echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))';)
 endef
 
+define filechk_svnversion.h
+	(echo \#define SVNVERSION \"$(__svnversion)\";)
+endef
 include/linux/version.h: $(srctree)/Makefile FORCE
 	$(call filechk,version.h)
 
 include/generated/utsrelease.h: include/config/kernel.release FORCE
 	$(call filechk,utsrelease.h)
 
+include/linux/svnversion.h: include/config/cl1.release FORCE
+	$(call filechk,svnversion.h)
 PHONY += headerdep
 headerdep:
 	$(Q)find $(srctree)/include/ -name '*.h' | xargs --max-args 1 \
@@ -1162,6 +1174,7 @@ MRPROPER_DIRS  += include/config usr/include include/generated          \
                   arch/*/include/generated
 MRPROPER_FILES += .config .config.old .version .old_version             \
                   include/linux/version.h                               \
+		  include/linux/svnversion.h				\
 		  Module.symvers tags TAGS cscope* GPATH GTAGS GRTAGS GSYMS
 
 # clean - Delete most, but leave enough to build external modules

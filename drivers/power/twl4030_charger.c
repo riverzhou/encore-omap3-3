@@ -292,7 +292,6 @@ static int twl4030charger_presence(void)
 }
 
 
-/*
  * Enable/Disable USB Charge funtionality.
  */
 static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
@@ -420,6 +419,7 @@ static irqreturn_t twl4030_charger_interrupt(int irq, void *arg)
 	dev_dbg(bci->dev, "CHG_PRES irq\n");
 	power_supply_changed(&bci->ac);
 	power_supply_changed(&bci->usb);
+
 	return IRQ_HANDLED;
 }
 
@@ -433,12 +433,12 @@ static irqreturn_t twl4030_bci_interrupt(int irq, void *arg)
 	int ret;
 
 	ret = twl_i2c_read_u8(TWL4030_MODULE_INTERRUPTS, &irqs1,
-			TWL4030_INTERRUPTS_BCIISR1A);
+			      TWL4030_INTERRUPTS_BCIISR1A);
 	if (ret < 0)
 		return IRQ_HANDLED;
 
 	ret = twl_i2c_read_u8(TWL4030_MODULE_INTERRUPTS, &irqs2,
-			TWL4030_INTERRUPTS_BCIISR2A);
+			      TWL4030_INTERRUPTS_BCIISR2A);
 	if (ret < 0)
 		return IRQ_HANDLED;
 
@@ -449,6 +449,10 @@ static irqreturn_t twl4030_bci_interrupt(int irq, void *arg)
 		power_supply_changed(&bci->ac);
 		power_supply_changed(&bci->usb);
 	}
+
+	/* various monitoring events, for now we just log them here */
+	if (irqs1 & (TWL4030_TBATOR2 | TWL4030_TBATOR1))
+		dev_warn(bci->dev, "battery temperature out of range\n");
 
 	if (irqs1 & TWL4030_BATSTS)
 		dev_crit(bci->dev, "battery disconnected\n");
@@ -530,6 +534,7 @@ static int twl4030bci_state(struct twl4030_bci *bci)
 {
 	int ret;
 	u8 state;
+
 	ret = twl4030_bci_read(TWL4030_BCIMSTATEC, &state);
 	if (ret) {
 		pr_err("twl4030_bci: error reading BCIMSTATEC\n");
@@ -537,6 +542,7 @@ static int twl4030bci_state(struct twl4030_bci *bci)
 	}
 
 	dev_dbg(bci->dev, "state: %02x\n", state);
+
 	return state;
 }
 
@@ -1068,7 +1074,6 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->usb.num_properties = ARRAY_SIZE(twl4030_charger_props);
 	bci->usb.get_property = twl4030_bci_get_property;
 
-
 	ret = power_supply_register(&pdev->dev, &bci->usb);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register usb: %d\n", ret);
@@ -1149,9 +1154,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	/* Enable interrupts now. */
 	reg = ~(TWL4030_ICHGLOW | TWL4030_ICHGEOC | TWL4030_TBATOR2 |
-			TWL4030_TBATOR1 | TWL4030_BATSTS);
+		TWL4030_TBATOR1 | TWL4030_BATSTS);
 	ret = twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, reg,
-				TWL4030_INTERRUPTS_BCIIMR1A);
+			       TWL4030_INTERRUPTS_BCIIMR1A);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to unmask interrupts: %d\n", ret);
 		goto fail_unmask_interrupts;
@@ -1159,7 +1164,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	reg = ~(TWL4030_VBATOV | TWL4030_VBUSOV | TWL4030_ACCHGOV);
 	ret = twl_i2c_write_u8(TWL4030_MODULE_INTERRUPTS, reg,
-				TWL4030_INTERRUPTS_BCIIMR2A);
+			       TWL4030_INTERRUPTS_BCIIMR2A);
 	if (ret < 0)
 		dev_warn(&pdev->dev, "failed to unmask interrupts: %d\n", ret);
 

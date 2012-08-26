@@ -143,7 +143,7 @@ static int nec_8048_panel_probe(struct omap_dss_device *dssdev)
 	bl->props.fb_blank = FB_BLANK_UNBLANK;
 	bl->props.power = FB_BLANK_UNBLANK;
 	bl->props.max_brightness = dssdev->max_backlight_level;
-	bl->props.brightness = 0;
+	bl->props.brightness = dssdev->max_backlight_level;
 
 	r = nec_8048_bl_update_status(bl);
 	if (r < 0)
@@ -157,6 +157,7 @@ static void nec_8048_panel_remove(struct omap_dss_device *dssdev)
 	struct nec_8048_data *necd = dev_get_drvdata(&dssdev->dev);
 	struct backlight_device *bl = necd->bl;
 
+	bl->props.power = FB_BLANK_POWERDOWN;
 	nec_8048_bl_update_status(bl);
 	backlight_device_unregister(bl);
 
@@ -181,6 +182,7 @@ static int nec_8048_panel_enable(struct omap_dss_device *dssdev)
 
 	r = omapdss_dpi_display_enable(dssdev);
 	dssdev->state = OMAP_DSS_DISPLAY_ACTIVE;
+	bl->props.fb_blank = FB_BLANK_UNBLANK;
 
 	return r;
 }
@@ -192,6 +194,7 @@ static void nec_8048_panel_disable(struct omap_dss_device *dssdev)
 
 	omapdss_dpi_display_disable(dssdev);
 	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
+	bl->props.fb_blank = FB_BLANK_POWERDOWN;
 	bl->props.brightness = 0;
 	nec_8048_bl_update_status(bl);
 

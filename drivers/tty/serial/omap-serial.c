@@ -932,6 +932,9 @@ serial_omap_set_termios(struct uart_port *port, struct ktermios *termios,
 	else
 		serial_out(up, UART_OMAP_MDR1, up->mdr1);
 
+		if (up->pdev->id == 1)
+			serial_out(up, 0x0c, 0x17);		//Henry: TXFLH_REG: UART/IrDA (SIR, MIR, FIR)/CIR Mode Selection: [3] [4] [5]
+
 	/* Hardware Flow Control Configuration */
 
 	if (termios->c_cflag & CRTSCTS) {
@@ -970,6 +973,9 @@ serial_omap_set_termios(struct uart_port *port, struct ktermios *termios,
 
 	spin_unlock_irqrestore(&up->port.lock, flags);
 	serial_omap_port_disable(up);
+	if (up->pdev->id != 0)		//Henry: delay a little in termios for BT module
+	    if (baud == 3000000)
+		mdelay(200);          //kevin: change 100ms delay to 200ms to make BT more stable
 	dev_dbg(up->port.dev, "serial_omap_set_termios+%d\n", up->pdev->id);
 }
 
@@ -1650,6 +1656,7 @@ static void omap_uart_restore_context(struct uart_omap_port *up)
 
 static int omap_serial_runtime_suspend(struct device *dev)
 {
+#if 0
 	struct uart_omap_port *up = dev_get_drvdata(dev);
 
 	if (!up)
@@ -1665,11 +1672,13 @@ static int omap_serial_runtime_suspend(struct device *dev)
 	else
 		up->enable_wakeup(up->pdev, false);
 done:
+#endif	
 	return 0;
 }
 
 static int omap_serial_runtime_resume(struct device *dev)
 {
+#if 0
 	struct uart_omap_port *up = dev_get_drvdata(dev);
 	struct omap_device *od;
 
@@ -1686,7 +1695,7 @@ static int omap_serial_runtime_resume(struct device *dev)
 		if (up->rts_mux_driver_control && (!up->rts_pullup_in_suspend))
 			omap_rts_mux_write(0, up->port.line);
 	}
-
+#endif
 	return 0;
 }
 

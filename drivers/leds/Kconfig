@@ -390,6 +390,12 @@ config LEDS_OMAP4430_SDP_KEYPAD
 	  This option enables support for keypad LEDs on the
           OMAP4430 SDP
 
+config LEDS_OMAP_DISPLAY
+	tristate "Display LED support for OMAP3/4 platforms"
+	depends on LEDS_CLASS
+	help
+	  This option enables support for display LEDs on the
+          OMAP3/4 platforms.
 config LEDS_NS2
 	tristate "LED support for Network Space v2 GPIO LEDs"
 	depends on LEDS_CLASS
@@ -420,6 +426,20 @@ config LEDS_ASIC3
 	  cannot be used. This driver supports hardware blinking with an on+off
 	  period from 62ms to 125s. Say Y to enable LEDs on the HP iPAQ hx4700.
 
+config LEDS_EP10
+	tristate "LED Support for EP10 GPIO LEDs"
+	depends on LEDS_CLASS
+	help
+	  This option enables support for LEDs connected to GPIO lines
+	  on EP10 project.
+
+config LEDS_BUTTON_EP10
+	tristate "LED Support for EP10 GPIO BUTTON LEDs"
+	depends on LEDS_CLASS
+	help
+	  This option enables support for LEDs connected to GPIO lines
+	  on EP10 project.
+
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
 	depends on LEDS_CLASS
@@ -429,6 +449,14 @@ config LEDS_TRIGGERS
 	  be configured via sysfs. If unsure, say Y.
 
 comment "LED Triggers"
+
+config EP10_LED_BLINK
+	bool "EP10 LED Blink Trigger support"
+	depends on LEDS_TRIGGERS
+	default n
+	help
+	  This allows LEDs to be controlled by a programmable timer
+	  via power_supply_leds not sysfs. 
 
 config LEDS_TRIGGER_TIMER
 	tristate "LED Timer Trigger"

@@ -27,13 +27,14 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 
+#include <linux/usb/composite.h>
 #define ADB_BULK_BUFFER_SIZE           4096
 
 /* number of tx requests to allocate */
 #define TX_REQ_MAX 4
 
 static const char adb_shortname[] = "android_adb";
-
+unsigned int android_adb_open=0;		//Henry Li@gavin 20120410
 struct adb_dev {
 	struct usb_function function;
 	struct usb_composite_dev *cdev;
@@ -348,7 +349,10 @@ static ssize_t adb_write(struct file *fp, const char __user *buf,
 	if (!_adb_dev)
 		return -ENODEV;
 	pr_debug("adb_write(%d)\n", count);
-
+/* <-- LH_SWRD_CL1_Henry@2012.4.10 improve USB storage connection stability (not break down frequently) -->*/
+	if (android_adb_open == 0)
+		android_adb_open=1;
+/* <-- LH_SWRD_CL1_Henry@2012.4.10 improve USB storage connection stability (not break down frequently) -->*/		
 	if (adb_lock(&dev->write_excl))
 		return -EBUSY;
 
@@ -417,7 +421,8 @@ static int adb_open(struct inode *ip, struct file *fp)
 
 	/* clear the error latch */
 	_adb_dev->error = 0;
-
+/* <-- LH_SWRD_CL1_Henry@2012.4.10 improve USB storage connection stability (not break down frequently) -->*/
+	android_adb_open=0;
 	return 0;
 }
 

@@ -262,6 +262,15 @@ obj-$(CONFIG_MACH_ENCORE)		+= board-encore.o \
 					   board-encore-display.o \
 					   hsmmc.o \
 					   omapxx_apps_brd_id.o
+obj-$(CONFIG_MACH_OMAP3621_EVT1A)	+= board-evt1a.o \
+					   board-evt-peripherals.o \
+					   board-evt-panel.o \
+					   board-evt-camera.o \
+					   board-edp1-camera-s5k5ca.o \
+					   board-edp1-camera-mt9v115.o \
+					   board-evt-reboot.o \
+					   hsmmc.o \
+					   omapxx_apps_brd_id.o
 obj-$(CONFIG_MACH_OMAP_3630SDP)		+= board-3630sdp.o \
 					   board-zoom-peripherals.o \
 					   board-zoom-display.o \
@@ -301,6 +310,7 @@ obj-$(CONFIG_MACH_OMAP4_PANDA)		+= board-omap4panda.o \
 obj-$(CONFIG_MACH_OMAP3517EVM)		+= board-am3517evm.o \
 					   omap_phy_internal.o \
 
+obj-$(CONFIG_TIWLAN_SDIO)		+= board-evt-wifi.o
 obj-$(CONFIG_MACH_OMAP3517EVM)		+= board-am3517evm.o
 
 obj-$(CONFIG_MACH_CRANEBOARD)		+= board-am3517crane.o
@@ -346,3 +356,5 @@ obj-$(CONFIG_ARCH_OMAP4)		+= omap4-reboot-reason.o
 endif
 
 obj-$(CONFIG_OMAP_RAM_CONSOLE)		+= omap_ram_console.o
+#add by mervins for update share region.
+obj-$(CONFIG_PROCFS_DISPLAY_SW_HW_VERSION) += share_region.o

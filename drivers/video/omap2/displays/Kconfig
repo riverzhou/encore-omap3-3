@@ -70,9 +70,10 @@ config PANEL_TC358765
 	select BACKLIGHT_CLASS_DEVICE
 	help
 	  Toshiba TC358765 DSI-2-LVDS chip with 1024x768 panel
+config PANEL_AT070TNA2
+		tristate "AT070TNA2 7-inch Panel"
 
-config PANEL_SIL9022
-	tristate "HDMI interface"
-	help
-		HDMI interface used in the Zoom board
+
+		help
+		  LCD panel used in the AT070TNA2
 endmenu

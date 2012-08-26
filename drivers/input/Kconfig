@@ -184,6 +184,9 @@ source "drivers/input/touchscreen/Kconfig"
 
 source "drivers/input/misc/Kconfig"
 
+source "drivers/input/sensor/Kconfig"
+
+source "drivers/input/sensor/vibrator/Kconfig"
 endif
 
 menu "Hardware I/O ports"

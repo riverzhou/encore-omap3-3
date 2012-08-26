@@ -63,6 +63,11 @@ MODULE_PARM_DESC(kernelpet, "pet watchdog in kernel via irq");
 
 static unsigned int wdt_trgr_pattern = 0x1234;
 static spinlock_t wdt_lock;
+/* <-- LH_SWRD_CL1_andy@2011.9.08*/// add by mervins,for share_region compile.
+#define MAX_RSTCIRCLE 40//
+int run_circle=0;//
+int boot=0;//
+EXPORT_SYMBOL_GPL(boot);//
 
 struct omap_wdt_dev {
 	void __iomem    *base;          /* physical */

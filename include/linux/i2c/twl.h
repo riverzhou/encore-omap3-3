@@ -463,8 +463,12 @@ int twl6030_unregister_notifier(struct notifier_block *nb,
 #define TWL4030_PM_MASTER_MEMORY_ADDRESS	0x23
 #define TWL4030_PM_MASTER_MEMORY_DATA		0x24
 
-#define TWL4030_PM_MASTER_KEY_CFG1		(twl_rev_is_tps65921() ? 0xFC : 0xC0)
-#define TWL4030_PM_MASTER_KEY_CFG2		(twl_rev_is_tps65921() ? 0x96 : 0x0C)
+//#define TWL4030_PM_MASTER_KEY_CFG1		(twl_rev_is_tps65921() ? 0xFC : 0xC0)
+//#define TWL4030_PM_MASTER_KEY_CFG2		(twl_rev_is_tps65921() ? 0x96 : 0x0C)
+
+#define TWL4030_PM_MASTER_KEY_CFG1		0xFC
+#define TWL4030_PM_MASTER_KEY_CFG2		0x96
+//>>>>>>> Lenovo A107 omap3 kernel. --- init ---
 
 #define TWL4030_PM_MASTER_KEY_TST1		0xe0
 #define TWL4030_PM_MASTER_KEY_TST2		0x0e

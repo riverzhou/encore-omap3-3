@@ -36,6 +36,11 @@
 
 #define L3_ERROR_LOG_ADDR		0x060
 
+
+#define L3_RT_NETWORK_CONTROL		0x078
+#define L3_DSS_IA_CONTROL		0x5400
+
+
 /* Register definitions for Sideband Interconnect */
 #define L3_SI_CONTROL			0x020
 #define L3_SI_FLAG_STATUS_0		0x510

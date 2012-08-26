@@ -51,7 +51,8 @@ static struct omap_uart_port_info omap_serial_default_info[] = {
 		.dma_rx_buf_size = DEFAULT_RXDMA_BUFSIZE,
 		.dma_rx_poll_rate = DEFAULT_RXDMA_POLLRATE,
 		.dma_rx_timeout = DEFAULT_RXDMA_TIMEOUT,
-		.auto_sus_timeout = DEFAULT_AUTOSUSPEND_DELAY,
+		.auto_sus_timeout = 86400000,	//DEFAULT_AUTOSUSPEND_DELAY,
+		//.auto_sus_timeout = -1,	//Henry: no pm for serial port
                 .wer = (OMAP_UART_WER_RLSI | \
                         OMAP_UART_WER_RHRI | OMAP_UART_WER_RX | \
                         OMAP_UART_WER_DCDCD | OMAP_UART_WER_RI | \
@@ -436,7 +437,8 @@ void __init omap_serial_init_port(struct omap_board_data *bdata,
 	if (bdata->id == omap_uart_con_id) {
 		pdata->console_uart = true;
 #ifdef CONFIG_DEBUG_LL
-		pdata->auto_sus_timeout = -1;
+		pdata->auto_sus_timeout = -1;	//restore
+		//pdata->auto_sus_timeout = -1;	//Henry: no pm for serial port
 #endif
 	}
 

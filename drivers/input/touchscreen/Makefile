@@ -65,5 +65,15 @@ obj-$(CONFIG_TOUCHSCREEN_WM97XX_MAINSTONE)	+= mainstone-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_WM97XX_ZYLONITE)	+= zylonite-wm97xx.o
 obj-$(CONFIG_TOUCHSCREEN_W90X900)	+= w90p910_ts.o
 obj-$(CONFIG_TOUCHSCREEN_TPS6507X)	+= tps6507x-ts.o
+obj-$(CONFIG_TOUCHSCREEN_EETI_EXC7200)	+= egalax_i2c.o
+# LH_SWRD_CL1_Richard@2011.5.6 for debug the cl1 use the ch2 touch-->
+#<-- LH_SWRD_CL1_Richard@2011.5.13  morgan touch for cl1
+obj-$(CONFIG_TOUCHSCREEN_MG_I2C)	+= mg-i2c-ts.o
+# LH_SWRD_CL1_Richard@2011.5.13 morgan touch for cl1-->
+#<-- LH_SWRD_CL1_Richard@20110720 max11871 touch for cl1
 obj-$(CONFIG_TOUCHSCREEN_SYNTM12XX)	+= syntm12xx.o
 obj-$(CONFIG_TOUCHSCREEN_QUANTUM_OBP)	+= qtouch_obp_ts.o
+# LH_SWRD_CL1_Richard@20110720 max11871 touch for cl1-->
+#<-- LH_SWRD_CL1_Richard@20110720 max11871 touch for cl1
+obj-$(CONFIG_TOUCHSCREEN_FT5_I2C)	+= ft5x06_ts.o
+# LH_SWRD_CL1_Richard@20110720 max11871 touch for cl1-->

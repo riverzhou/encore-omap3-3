@@ -73,9 +73,6 @@
 #define LV8093_PWR_ON			(!LV8093_PWR_OFF)
 #endif
 
-static struct pm_qos_request_list pm_qos_handler;
-#define SET_MPU_CONSTRAINT         12
-#define CLEAR_MPU_CONSTRAINT       -1
 
 #ifdef CONFIG_VIDEO_LV8093
 static int lv8093_lens_power_set(enum v4l2_power power)
@@ -179,6 +176,7 @@ static int imx046_sensor_power_set(struct v4l2_int_device *s,
 	struct isp_csi2_lanes_cfg lanecfg;
 	struct isp_csi2_phy_cfg phyconfig;
 	static enum v4l2_power previous_power = V4L2_POWER_OFF;
+	static struct pm_qos_request_list *qos_request;
 	int err = 0;
 
 	switch (power) {
@@ -195,8 +193,7 @@ static int imx046_sensor_power_set(struct v4l2_int_device *s,
 					 OCP_INITIATOR_AGENT, 800000);
 
 		/* Hold a constraint to keep MPU in C1 */
-		pm_qos_update_request(&pm_qos_handler,
-							SET_MPU_CONSTRAINT);
+		omap_pm_set_max_mpu_wakeup_lat(&qos_request, 12);
 
 		isp_csi2_reset(&isp->isp_csi2);
 
@@ -271,8 +268,7 @@ static int imx046_sensor_power_set(struct v4l2_int_device *s,
 		/* Remove pm constraints */
 		omap_pm_set_min_bus_tput(vdev->cam->isp,
 						OCP_INITIATOR_AGENT, 0);
-		pm_qos_update_request(&pm_qos_handler,
-							CLEAR_MPU_CONSTRAINT);
+		omap_pm_set_max_mpu_wakeup_lat(&qos_request, -1);
 
 		/* Make sure not to disable the MCLK twice in a row */
 		if (previous_power == V4L2_POWER_ON)
@@ -360,8 +356,7 @@ struct imx046_platform_data zoom2_imx046_platform_data = {
 
 void __init zoom2_cam_init(void)
 {
-	pm_qos_add_request(&pm_qos_handler, PM_QOS_CPU_DMA_LATENCY,
-						CLEAR_MPU_CONSTRAINT);
+
 	/* Request and configure gpio pins */
 	if (gpio_request(IMX046_STANDBY_GPIO, "ov3640_standby_gpio") != 0) {
 		printk(KERN_ERR "Could not request GPIO %d",

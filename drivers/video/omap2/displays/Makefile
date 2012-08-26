@@ -10,3 +10,4 @@ obj-$(CONFIG_PANEL_TPO_TD043MTEA1) += panel-tpo-td043mtea1.o
 obj-$(CONFIG_PANEL_ACX565AKM) += panel-acx565akm.o
 
 obj-$(CONFIG_PANEL_TC358765) += panel-tc358765.o
+obj-$(CONFIG_PANEL_AT070TNA2) += panel-at070tna2.o
