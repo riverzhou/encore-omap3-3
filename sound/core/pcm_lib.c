@@ -623,6 +623,10 @@ int snd_interval_refine(struct snd_interval *i, const struct snd_interval *v)
 		changed = 1;
 	}
 	if (i->max > v->max) {
+/* <-- LH_SWRD_CL1_Henry@2012.3.30 Fix bug of "media player no sound output while playing music"  */
+		if (i->min == i->max)		//Henry Li: handle RATE = [48000 48000] (v = [44100 44100]) ==> RATE = [44100 44100]
+			i->min = v->max;	//             Let i->min = i->max, not (i->min > i->max)
+/*  LH_SWRD_CL1_Henry@2012.3.30 Fix bug of "media player no sound output while playing music"  -->*/	
 		i->max = v->max;
 		i->openmax = v->openmax;
 		changed = 1;
