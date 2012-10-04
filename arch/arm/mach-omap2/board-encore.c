@@ -205,7 +205,6 @@ static void __init omap_encore_init(void)
 
 static void __init encore_reserve(void)
 {
-	omap_init_ram_size();
 	/* do the static reservations first */
 	memblock_remove(OMAP3_PHYS_ADDR_SMC_MEM, PHYS_ADDR_SMC_SIZE);
 
