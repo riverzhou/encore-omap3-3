@@ -4,9 +4,15 @@
 # create a compressed vmlinuz image from the original vmlinux
 #
 
+plus_sec := $(call as-instr,.arch_extension sec,+sec)
+
+AFLAGS_head.o += -Wa,-march=armv7-a$(plus_sec)
+AFLAGS_misc.o += -Wa,-march=armv7-a$(plus_sec)
+
 HEAD	= head.o
 OBJS	= misc.o
 FONTC	= $(srctree)/drivers/video/console/font_acorn_8x8.c
+
 
 #
 # Architecture dependencies
@@ -41,6 +47,7 @@ OBJS		+= head-sharpsl.o
 endif
 
 ifeq ($(CONFIG_ARCH_OMAP),y)
+AFLAGS_head-omap.o += -Wa,-march=armv7-a$(plus_sec)
 OBJS		+= head-omap.o
 endif
 
@@ -106,6 +113,7 @@ $(obj)/vmlinux: $(obj)/vmlinux.lds $(obj)/$(HEAD) $(obj)/piggy.o \
 $(obj)/piggy.gz: $(obj)/../Image FORCE
 	$(call if_changed,gzip)
 
+AFLAGS_piggy.o += -Wa,-march=armv7-a$(plus_sec)
 $(obj)/piggy.o:  $(obj)/piggy.gz FORCE
 
 CFLAGS_font.o := -Dstatic=
