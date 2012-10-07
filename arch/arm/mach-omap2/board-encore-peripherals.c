@@ -185,8 +185,8 @@ int cyttsp_dev_init(int resource)
 }
 
 static struct cyttsp_platform_data cyttsp_platform_data = {
-        .maxx = 480,
-        .maxy = 800,
+        .maxx = 600,
+        .maxy = 1024,
         .flags = 0,
         .gen = CY_GEN3,
         .use_st = CY_USE_ST,
