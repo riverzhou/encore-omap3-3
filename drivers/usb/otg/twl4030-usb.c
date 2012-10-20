@@ -318,8 +318,6 @@ static void twl4030_usb_set_mode(struct twl4030_usb *twl, int mode)
 
 	switch (mode) {
 	case T2_USB_MODE_ULPI:
-		twl4030_usb_set_bits(twl, ULPI_FUNC_CTRL,
-					ULPI_FUNC_CTRL_SUSPENDM);
 		twl4030_usb_clear_bits(twl, ULPI_IFC_CTRL,
 					ULPI_IFC_CTRL_CARKITMODE);
 		twl4030_usb_set_bits(twl, POWER_CTRL, POWER_CTRL_OTG_ENAB);
@@ -382,8 +380,10 @@ static void __twl4030_phy_power(struct twl4030_usb *twl, int on)
 static void twl4030_phy_power(struct twl4030_usb *twl, int on)
 {
 	if (on) {
+#if 0	/* LGE_CHANGE [HEAVEN: newcomet@lge.com] on 2009-10-14, for <25.12 USB interrupt fix> */
 		regulator_enable(twl->usb3v1);
 		regulator_enable(twl->usb1v8);
+#endif
 		/*
 		 * Disabling usb3v1 regulator (= writing 0 to VUSB3V1_DEV_GRP
 		 * in twl4030) resets the VUSB_DEDICATED2 register. This reset
@@ -393,6 +393,10 @@ static void twl4030_phy_power(struct twl4030_usb *twl, int on)
 		 */
 		twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0,
 							VUSB_DEDICATED2);
+
+#if 1	/* LGE_CHANGE [HEAVEN: newcomet@lge.com] on 2009-10-14, for <25.12 USB interrupt fix> */
+		regulator_enable(twl->usb1v8);
+#endif
 		regulator_enable(twl->usb1v5);
 		__twl4030_phy_power(twl, 1);
 		twl4030_usb_write(twl, PHY_CLK_CTRL,
@@ -404,7 +408,13 @@ static void twl4030_phy_power(struct twl4030_usb *twl, int on)
 		__twl4030_phy_power(twl, 0);
 		regulator_disable(twl->usb1v5);
 		regulator_disable(twl->usb1v8);
+#if 1	/* LGE_CHANGE [HEAVEN: newcomet@lge.com] on 2009-10-14, for <25.12 USB interrupt fix> */
+		/* Put VUSB3V1 regulator in sleep mode */
+		twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x08,
+				                        VUSB_DEDICATED2);
+#else
 		regulator_disable(twl->usb3v1);
+#endif
 	}
 }
 
@@ -412,88 +422,14 @@ static void twl4030_phy_suspend(struct twl4030_usb *twl, int controller_off)
 {
 	if (twl->asleep)
 		return;
-#if 0
-	if (twl->chgd_capable) {
-		int st;
-		/*
-		 * Disable OTG DM/DP pull-downs. They will interfere
-		 * with the Charger Detection resistors, which in turn
-		 * lie in a separate analogue block.
-		 */
-		twl4030_phy_power(twl, 1);
-		twl4030_i2c_access(twl, 1);
-		twl4030_usb_set_bits(twl, ULPI_FUNC_CTRL, ULPI_FUNC_CTRL_SUSPENDM);
-		twl4030_usb_clear_bits(twl, ULPI_FUNC_CTRL,
-			(ULPI_FUNC_CTRL_OPMODE_NOSYNC_NOEOP & ~ ULPI_FUNC_CTRL_OPMODE) );
 
-		twl4030_usb_set_bits(twl, ULPI_FUNC_CTRL, ULPI_FUNC_CTRL_OPMODE);
-
-		st = twl4030_usb_write_verify(twl, ULPI_FUNC_CTRL,
-			ULPI_FUNC_CTRL_SUSPENDM | ULPI_FUNC_CTRL_OPMODE);
-
-		WARN_ON(st < 0);
-
-		st = twl4030_usb_read(twl, ULPI_FUNC_CTRL);
-		dev_dbg(twl->dev, "%s: ULPI_FUNC_CTRL 0x%02x\n", __FUNCTION__, st);
-
-		twl4030_usb_clear_bits(twl, ULPI_FUNC_CTRL, ULPI_FUNC_CTRL_SUSPENDM );
-		twl4030_i2c_access(twl, 0);
-	}
-#endif
 	twl4030_phy_power(twl, 0);
 	twl->asleep = 1;
 	dev_dbg(twl->dev, "%s\n", __func__);
-
-	if (twl->chgd_capable) {
-		/*
-		 * Switch VUSB supply to VBUS (SW2VBUS = 1, SW2VBAT =0) This
-		 * allows battery charger detection to function without prior
-		 * enabling of the charge-pump (in case of low VBAT) and with
-		 * minimal power drain.
-		 */
-		twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
-					0x18,
-					VUSB_DEDICATED1);
-
-		/*
-		 * Enable the VBUS3V1 power resource (required in charger
-		 * detection)
-		 */
-		if (!regulator_is_enabled(twl->usb3v1))
-			regulator_enable(twl->usb3v1);
-
-		twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
-					0,
-					VUSB_DEDICATED2);
-
-		/* Enable Charger detection FSM (HW mode) (USB_DET_EN = 1) */
-		twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE,
-					TPS65921_USB_HW_CHRG_DET_EN,
-					TPS65921_USB_DTCT_CTRL);
-
-	}
 }
 
 static void __twl4030_phy_resume(struct twl4030_usb *twl)
 {
-	if (!twl->asleep)
-		return;
-
-	if (twl->chgd_capable) {
-		/* Disable Charger detection FSM (HW mode) (USB_DET_EN = 0) */
-		twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE,
-						0,
-						TPS65921_USB_DTCT_CTRL);
-
-		if (regulator_is_enabled(twl->usb3v1))
-			regulator_disable(twl->usb3v1);
-
-		/* Restore VUSB supply to VBAT */
-		twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER,
-						0x14,
-						VUSB_DEDICATED1);
-	}
-
 	twl4030_phy_power(twl, 1);
 	twl4030_i2c_access(twl, 1);
 	twl4030_usb_set_mode(twl, twl->usb_mode);
@@ -515,16 +451,13 @@ static void twl4030_phy_resume(struct twl4030_usb *twl)
 
 static int twl4030_usb_ldo_init(struct twl4030_usb *twl)
 {
-	const uint8_t key1 = twl_rev_is_tps65921() ? 0xFC : 0xC0;
-	const uint8_t key2 = twl_rev_is_tps65921() ? 0x96 : 0x0C;
-
 	/* Enable writing to power configuration registers */
 	twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER,
-			key1,
+			TWL4030_PM_MASTER_KEY_CFG1,
 			TWL4030_PM_MASTER_PROTECT_KEY);
 
 	twl_i2c_write_u8(TWL4030_MODULE_PM_MASTER,
-			key2,
+			TWL4030_PM_MASTER_KEY_CFG2,
 			TWL4030_PM_MASTER_PROTECT_KEY);
 
 	/* Keep VUSB3V1 LDO in sleep state until VBUS/ID change detected*/
@@ -533,8 +466,17 @@ static int twl4030_usb_ldo_init(struct twl4030_usb *twl)
 	/* input to VUSB3V1 LDO is from VBAT, not VBUS */
 	twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x14, VUSB_DEDICATED1);
 
+#if 1	/* LGE_CHANGE [HEAVEN: newcomet@lge.com] on 2009-10-14, for <25.12 USB interrupt fix> */
+	/* Turn on 3.1V regulator */
+	twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0x20, VUSB3V1_DEV_GRP);
+#else
 	/* Initialize 3.1V regulator */
 	twl_i2c_write_u8(TWL4030_MODULE_PM_RECEIVER, 0, VUSB3V1_DEV_GRP);
+
+	twl->usb3v1 = regulator_get(twl->dev, "usb3v1");
+	if (IS_ERR(twl->usb3v1))
+		return -ENODEV;
+#endif
 
 	twl->usb3v1 = regulator_get(twl->dev, "usb3v1");
 	if (IS_ERR(twl->usb3v1))
@@ -584,7 +526,7 @@ static ssize_t twl4030_usb_vbus_show(struct device *dev,
 
 	spin_lock_irqsave(&twl->lock, flags);
 	ret = sprintf(buf, "%s\n",
-			(twl->linkstat == USB_EVENT_VBUS) ? "on" : "off");
+			(twl->vbus_supplied) ? "on" : "off");
 	spin_unlock_irqrestore(&twl->lock, flags);
 
 	return ret;
@@ -597,6 +539,7 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 	int status;
 
 	status = twl4030_usb_linkstat(twl);
+
 	if (status >= 0) {
 		/* FIXME add a set_power() method so that B-devices can
 		 * configure the charger appropriately.  It's not always
